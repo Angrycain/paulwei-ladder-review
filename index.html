@@ -1,0 +1,821 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>魏神阶梯复盘</title>
+<meta name="description" content="基于 Paul Wei（@coolish）公开 BitMEX 原始账本的独立复盘：卖单阶梯几何、币本位回撤成因、三年杠杆演化与 ETH 币本位映射。">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --ground:#faf8f2; --paper:#ffffff; --ink:#1b1913; --ink-2:#5b584f; --ink-3:#8b877c; --rule:#e3dfd2;
+  --accent:#d9521f; --accent-soft:#fbe9df; --blue:#2a78d6; --blue-soft:#e4eefb; --aqua:#168f65; --red:#c9403f;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --serif:"Noto Serif SC","Songti SC","STSong",Georgia,serif;
+  --sans:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#15140f; --paper:#1d1c16; --ink:#f1eee4; --ink-2:#b8b4a6; --ink-3:#7f7b6e; --rule:#2f2d25;
+    --accent:#f0764a; --accent-soft:#3a2419; --blue:#5b9ae8; --blue-soft:#1d2b40; --aqua:#3cc08f; --red:#ef7069;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#15140f; --paper:#1d1c16; --ink:#f1eee4; --ink-2:#b8b4a6; --ink-3:#7f7b6e; --rule:#2f2d25;
+  --accent:#f0764a; --accent-soft:#3a2419; --blue:#5b9ae8; --blue-soft:#1d2b40; --aqua:#3cc08f; --red:#ef7069;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.75;-webkit-font-smoothing:antialiased}
+.wrap{max-width:76ch;margin:0 auto;padding:3.5rem 1.25rem 6rem}
+header{display:grid;gap:.6rem;margin-bottom:2.5rem}
+.eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+h1{font-family:var(--serif);font-weight:700;font-size:clamp(1.9rem,1.2rem+2.4vw,2.7rem);line-height:1.2;margin:0;text-wrap:balance;letter-spacing:-.01em}
+.lede{font-size:1.05rem;color:var(--ink-2);margin:0;max-width:62ch}
+.meta{font-family:var(--mono);font-size:.74rem;color:var(--ink-3);display:flex;flex-wrap:wrap;gap:.4rem 1.4rem;margin-top:.4rem}
+h2{font-family:var(--serif);font-weight:700;font-size:1.45rem;line-height:1.3;margin:3.2rem 0 1rem;letter-spacing:-.005em;text-wrap:balance}
+h2 .num{font-family:var(--mono);font-weight:400;font-size:.78rem;color:var(--accent);letter-spacing:.1em;display:block;margin-bottom:.35rem}
+h3{font-family:var(--sans);font-weight:700;font-size:1.02rem;margin:1.8rem 0 .5rem}
+p{margin:.6rem 0}
+strong{font-weight:700;color:var(--ink)}
+.callout{background:var(--paper);border-left:3px solid var(--accent);padding:1rem 1.2rem;margin:1.4rem 0;border-radius:0 6px 6px 0}
+.callout.blue{border-left-color:var(--blue)}
+.callout p{margin:.35rem 0}
+.findings{display:grid;gap:.9rem;margin:1.4rem 0 0;padding:0;list-style:none;counter-reset:f}
+.findings li{position:relative;padding:.95rem 1.1rem .95rem 3.1rem;background:var(--paper);border:1px solid var(--rule);border-radius:8px}
+.findings li::before{counter-increment:f;content:counter(f);position:absolute;left:1rem;top:.95rem;font-family:var(--mono);font-weight:600;font-size:.9rem;color:var(--accent)}
+.findings b{display:block;font-weight:700;margin-bottom:.15rem}
+.num-big{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600;color:var(--accent)}
+figure{margin:1.6rem 0;background:#fcfcfb;border:1px solid var(--rule);border-radius:8px;padding:.6rem}
+figure img{display:block;width:100%;height:auto;max-width:100%}
+figcaption{font-size:.82rem;color:var(--ink-2);padding:.55rem .4rem .1rem;line-height:1.55}
+.tbl{overflow-x:auto;margin:1.1rem 0;border:1px solid var(--rule);border-radius:8px;background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:.84rem;font-variant-numeric:tabular-nums}
+th,td{padding:.48rem .7rem;border-bottom:1px solid var(--rule);text-align:right;white-space:nowrap;vertical-align:top}
+th{font-weight:700;color:var(--ink-2);font-size:.76rem;letter-spacing:.03em;background:var(--ground)}
+th:first-child,td:first-child{text-align:left}
+td.l,th.l{text-align:left;white-space:normal}
+tr:last-child td{border-bottom:none}
+.neg{color:var(--red)} .pos{color:var(--aqua)}
+.mono{font-family:var(--mono);font-size:.86em}
+.rule-list{display:grid;gap:.75rem;margin:1rem 0;padding:0;list-style:none}
+.rule-list li{display:grid;grid-template-columns:7.5rem 1fr;gap:.8rem;padding:.7rem 0;border-top:1px solid var(--rule)}
+.rule-list li:last-child{border-bottom:1px solid var(--rule)}
+.rule-list .k{font-family:var(--mono);font-size:.76rem;color:var(--accent);letter-spacing:.05em;padding-top:.2rem}
+.rule-list .v b{display:block;font-weight:700}
+.rule-list .v small{display:block;color:var(--ink-2);font-size:.86rem;line-height:1.6;margin-top:.2rem}
+.caveat{font-size:.86rem;color:var(--ink-2);border-top:1px dashed var(--rule);padding-top:.8rem;margin-top:2rem}
+.caveat ul{padding-left:1.2rem;margin:.4rem 0}
+ul.plain{padding-left:1.25rem}
+ul.plain li{margin:.3rem 0}
+a{color:var(--blue)}
+@media (max-width:640px){.rule-list li{grid-template-columns:1fr;gap:.2rem}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="eyebrow">BitMEX 原始账本 · 2020-05 → 2026-04 · 43,214 挂单 / 173,058 成交</div>
+  <h1>魏神阶梯复盘：那串"提前挂好的卖单"，和牛市里一次次缩水的币本位</h1>
+  <p class="lede">只看 Paul Wei（@coolish）的原始挂单、成交与钱包账本，不看任何策略代码。回答三个问题：他的卖单阶梯到底按什么几何提前铺的；2023 年起这轮牛市里，他的币本位为什么涨了又回撤、回撤从哪来；把这套打法搬到 ETH 币本位时，哪些错可以不再犯。</p>
+  <div class="meta"><span>分析日期 2026-08-23</span><span>仓位重建与交易所终端快照逐张吻合（−1,298,000 张 / 均价 73,013）</span><span>ETH 行情截至 2026-08-22 收盘 2,423</span></div>
+</header>
+
+<h2><span class="num">00 · 结论</span>先说五件事</h2>
+<ol class="findings">
+  <li><b>截图里那串"提前挂好的卖单"不是当天挂着的单，是回放面板把之后 13 个月的成交画成了水平线。</b>绿色 134K @ 20,713 是 2023-03-09 当天挂、当天成交的买单；8K @ 23,800 在截图 K 线（01-26）之前已成交；15K @ 30,666 是 4 月的成交，而 2 月时那档挂的是 80K、10 天后撤掉。13 档全部与未来成交逐笔吻合。挂单表里<strong>2023 年没有任何一张 ≥32K 的卖单存在过</strong>（撤单会留痕），他真实的挂法是一条<strong>随市价滚动、每几天到几周撤了重挂的 0～+25% 卖单带</strong>。跨周期不变的是价位词汇表：上一轮（2021）成交最密的区域 × 固定重复数字锚点，最重的 180K 落在 2021 年 50K 以上最密的 57–58K。</li>
+  <li><b>"海量"只是相对交易所里的小仓而言，而且这 13 笔只是冰山一角。</b>13 笔合计 70.8 万张 ≈ 15 BTC 名义，是 2023-01 钱包 4.66 BTC 的 3.3 倍、71 BTC 总财富的 <span class="num-big">0.2×</span>；但同期（2023-10→2024-03）他一共成交了 778 笔卖单、2,928 万张，同时买回 2,888 万张——这 13 笔只占卖出量的 2.7%，净仓位在 2024-02 几乎没动（−75.8 万 → −76.2 万张）。交易所钱包是一个 6%→32% 的"执行袖口"，大头 BTC 在场外。</li>
+  <li><b>2023-10 以后币本位的每一次回撤，都发生在 BTC 上涨 + 他净空头的时候。</b>三次 −8.9% 分别对应 2024-02/03、2024-09→11、2025-04→10 三波主升浪；月度币本位收益与 BTC 月涨幅相关系数 <span class="num-big">−0.40</span>——BTC 涨的月份他平均亏 0.26 BTC，跌的月份平均赚 2.36 BTC。</li>
+  <li><b>真正赚币的不是方向，是阶梯执行。</b>2023-01→2026-04 币本位 +26.5 BTC = EOD 方向性仓位 <span class="neg">−22.9</span> + 日内/短线执行 <span class="pos">+49.6</span> + 资金费 <span class="pos">+2.5</span> − 手续费 <span class="neg">−2.6</span>。反事实：若 EOD 净仓位归零只保留执行，同期 +48 BTC、最大回撤 4.3%（实际 +23.4 / −8.9%）。</li>
+  <li><b>他最贵的三个错分别值 38 BTC、13 BTC、25 BTC</b>：2021-04/05 顶部 1.4–2.0× 杠杆多头（币本位 −51%，一天 −17.2 BTC）；2021-10 突破时净空 −0.7×（−17%）；2022 年袖口里 11× 杠杆抄底（−27%，852 天才收复）。这三类错在 ETH 币本位模型里都能用规则挡掉。</li>
+</ol>
+
+<h2><span class="num">01 · 数据与口径</span>用了什么、怎么重建、哪里不能信</h2>
+<p>数据来自公开镜像仓库 <span class="mono">btc_trading_since_2020</span>：<span class="mono">api-v1-order.csv</span>（挂单生命周期，含撤单）、<span class="mono">api-v1-execution-tradeHistory.csv</span>（成交 / 资金费）、<span class="mono">derived-equity-curve.csv</span>（钱包与剔除出入金后的 <span class="mono">adjustedWealthXBT</span>），行情用 BitMEX XBTUSD 1h/1d。</p>
+<p>从成交流水按反向合约口径（均价 = 1/价格加权）逐笔重建 XBTUSD 净仓位与未实现盈亏，得到<strong>币本位 MTM 权益 = adjustedWealthXBT + 未实现</strong>；期末净仓位 −1,298,000 张、均价 73,013.5，与 <span class="mono">api-v1-position.snapshot.csv</span> 的 −1,298,000 / 73,012.95 吻合。2023-08-01→2026-04-14 窗口 MTM 增量 +25.97 BTC，与钱包口径真值 +25.333 一致（差值即两端未实现）。</p>
+<div class="callout blue">
+  <p><strong>三个必须记住的口径限制</strong></p>
+  <p>① <span class="mono">transactTime</span> 只在 2020–2023 年等于下单时间；2024 年起该字段等于最终成交/撤单时间（撤单寿命为 0 的比例 2023 年 27%、2024 年 97%）。所以"提前多久挂"只能在 2020–2023 段量化，2024 年以后只能看<em>在哪个价位成交了多少</em>。</p>
+  <p>② <span class="mono">adjustedWealthXBT</span> 把提走的 66 BTC 按币数加回，等于假设场外 BTC 一直是 BTC。因此"USD 本位回撤"只是在这个假设下的数字。</p>
+  <p>③ 本文把每日权益变化拆成 <em>EOD 方向性</em>（昨日净仓 × 今日价格变化）和 <em>残差</em>（日内换仓、阶梯价差、资金费、手续费）。残差含日内方向交易，不等同于严格的日内"纯价差"口径（那是 +4.365 BTC）。两者不冲突，只是切法不同。</p>
+</div>
+
+<h2><span class="num">02 · 阶梯几何</span>他到底怎么提前挂的</h2>
+<figure><img src="figures/fig2_ladder_vs_2021_density.png" alt="2021 年价格时间密度与 2023-01 卖单阶梯对照" width="1830" height="1132" loading="lazy"><figcaption>左：2021 年每 1K 价格区间占全年小时数的百分比，即上一轮的"中枢"。右：回放面板标注的 13 笔成交（K 张，发生在其后 13 个月内）。最重的三档 55,555 / 56,666 / 57,777 压在 2021 年 3–4 月与 10–11 月两次盘整区；40–50K 这段 2021 年最密的区反而一张没挂。</figcaption></figure>
+
+<h3>价位：固定锚点，跨周期复用</h3>
+<p>30,666 / 32,888 / 33,888 / 34,888 / 35,999 / 50,666 / 51,999 / 55,555 / 56,666 / 57,777 这组价位在 2021、2022、2023、2024 四年反复出现（57,777 在 2021-03、04、05 和 2024-02、05、07、08、11 都挂过）。2021、2024、2025 三年限价单名义额分别有 33.7% / 38.6% / 34.1% 落在 …666/…888/…999/…555/…777 这类重复数字上；距市价 ≥10% 的远端阶梯里 93% 是这类价位。这是<strong>可执行、可验证的离散锚点集合</strong>，不是每天重算的指标值。</p>
+<div class="tbl"><table>
+<thead><tr><th>价位</th><th>张数 (K)</th><th>2021 年 ±1.5% 内小时占比</th><th>最近斐波那契</th><th>偏差</th><th>成交日</th></tr></thead>
+<tbody>
+<tr><td>23,800</td><td>8</td><td>0.0%</td><td>—</td><td>—</td><td>2023-01-25</td></tr>
+<tr><td>30,666</td><td>15</td><td>0.7%</td><td>0.236 (28,084)</td><td>+9.2%</td><td>2023-04-14 → 06-24</td></tr>
+<tr><td>32,888</td><td>30</td><td>3.7%</td><td>0.382 (35,931)</td><td>−8.5%</td><td>2023-10-23</td></tr>
+<tr><td>33,888</td><td>60</td><td>4.5%</td><td>0.382</td><td>−5.7%</td><td>2023-10-23</td></tr>
+<tr><td>34,888</td><td>60</td><td>3.5%</td><td>0.382</td><td>−2.9%</td><td>2023-10-23</td></tr>
+<tr><td>35,999</td><td>20</td><td>3.6%</td><td>0.382</td><td><b>+0.2%</b></td><td>2023-11-02</td></tr>
+<tr><td>38,946</td><td>35</td><td>3.0%</td><td>0.382</td><td>+8.4%</td><td>2023-12-01</td></tr>
+<tr><td>50,666</td><td>40</td><td>4.5%</td><td>0.618 (48,615)</td><td>+4.2%</td><td>2024-02-14</td></tr>
+<tr><td>51,999</td><td>40</td><td>2.1%</td><td>0.705 (53,291)</td><td>−2.4%</td><td>2024-02-14</td></tr>
+<tr><td>55,555</td><td>80</td><td>5.4%</td><td>0.786 (57,645)</td><td>−3.6%</td><td>2024-02-27</td></tr>
+<tr><td>56,666</td><td>80</td><td>7.4%</td><td>0.786</td><td>−1.7%</td><td>2024-02-27</td></tr>
+<tr><td>57,777</td><td>180</td><td>7.4%</td><td>0.786</td><td><b>+0.2%</b></td><td>2024-02-28</td></tr>
+<tr><td>60,539</td><td>60</td><td>4.6%</td><td>0.886 (63,019)</td><td>−3.9%</td><td>2024-02-28</td></tr>
+</tbody></table></div>
+<p>均匀撒点的基线密度是 3.3%；他 13 档里 9 档高于基线，最重的三档是 5.4–7.4%。斐波那契只有 35,999（0.382）和 57,777（0.786）两处精确命中，其余偏 2–9%，更像<strong>重复数字落在中枢带里时顺便撞上了斐波那契</strong>。中枢密度配重是主逻辑，斐波那契至多是次要校核。</p>
+
+<h3>形状：金字塔 + 簇状分层</h3>
+<ul class="plain">
+  <li><strong>簇内步长 2–3%，簇间跳 29–30%</strong>：32,888→33,888→34,888→35,999 每档 +3%；55,555→56,666→57,777 每档 +2%；38,946→50,666 跳 +30%。不是等比网格，是"中枢内密铺、中枢间留空"。</li>
+  <li><strong>数量随距离递增</strong>：2020–2023 年 760 个 ≥5 档的批次里，80% 的批次数量与距市价距离正相关（均值 +0.50；买单 +0.56，卖单 +0.42）。8K → 15K → 30K → 60K → … → 180K 基本是逐档翻倍，到最密中枢封顶，再往上递减（60,539 只挂 60K）。</li>
+  <li><strong>远端阶梯的真实生命</strong>：距市价 ≥10% 的批次共 66 个，中位 13.5 档、步长 0.85%、名义 135 万张，成交率仅 3%，撤单中位寿命 2–10 天。2023 年下单时间可信的 469 张卖单里，寿命超过 20 天的只有 8 张（全是 2023-02-16 那批 25.7–30K，03-10 全撤），≥10% 以上的 40 张远单 38 张撤掉。2020–2023 年成交额里只有约 1% 来自挂了 7 天以上的单。<strong>没有"一年前挂好等着成交"这回事</strong>；跨周期保留的是价位词汇表和按币数分配的规则，挂单本身是滚动带。</li>
+  <li><strong>近端阶梯才是日常引擎</strong>：距市价 &lt;10% 的批次 1,149 个，中位 8 档、步长 0.22%、成交率 80%。2023-10→2024-03 他卖出 2,928 万张（VWAP 46,804）、同时买回 2,888 万张（VWAP 46,126）——换手几乎对称，价差 +1.5%，钱包只有 10–15 BTC。</li>
+</ul>
+<div class="tbl"><table>
+<thead><tr><th class="l">距市价</th><th>买单成交率</th><th>卖单成交率</th><th>买单撤单中位寿命 (h)</th><th>卖单撤单中位寿命 (h)</th></tr></thead>
+<tbody>
+<tr><td class="l">0–1%</td><td>82%</td><td>81%</td><td>0.3</td><td>0.1</td></tr>
+<tr><td class="l">1–3%</td><td>70%</td><td>69%</td><td>2.1</td><td>0.9</td></tr>
+<tr><td class="l">3–6%</td><td>49%</td><td>53%</td><td>10</td><td>5</td></tr>
+<tr><td class="l">6–10%</td><td>31%</td><td>25%</td><td>31</td><td>12</td></tr>
+<tr><td class="l">10–20%</td><td>13%</td><td>11%</td><td>41</td><td>80</td></tr>
+<tr><td class="l">20–40%</td><td>3%</td><td>0%</td><td>51</td><td>120</td></tr>
+</tbody></table></div>
+<h3>滚动带：卖单相对月初价的位置（2023-10 → 2024-03）</h3>
+<div class="tbl"><table>
+<thead><tr><th class="l">月份</th><th>成交卖单数</th><th>成交张数 (万)</th><th>成交价相对月初 p10 / p50 / p90</th><th>撤单数</th><th>撤单价相对月初 p50</th></tr></thead>
+<tbody>
+<tr><td class="l">2023-10</td><td>110</td><td>302</td><td>+0.8% / +5.9% / +28%</td><td>12</td><td>+5.3%</td></tr>
+<tr><td class="l">2023-11</td><td>145</td><td>295</td><td>+1.1% / +7.0% / +9.5%</td><td>23</td><td>+8.3%</td></tr>
+<tr><td class="l">2023-12</td><td>147</td><td>392</td><td>+2.7% / +13% / +16%</td><td>8</td><td>+13%</td></tr>
+<tr><td class="l">2024-01</td><td>102</td><td>193</td><td>−0.7% / +2.6% / +11%</td><td>12</td><td>+6.8%</td></tr>
+<tr><td class="l">2024-02</td><td>150</td><td>762</td><td>0.0% / +20% / +45%</td><td>36</td><td>+22%</td></tr>
+<tr><td class="l">2024-03</td><td>124</td><td>699</td><td>−0.4% / +8.8% / +14%</td><td>6</td><td>+12%</td></tr>
+</tbody></table></div>
+<p>卖单带每个月都跟着市价上移，中位在月初价之上 3–20%，被撤的单也在同一条带里——这就是"提前挂"的真实形态：<strong>领先市价一到两个中枢，不是领先一个周期</strong>。而数量之所以"到时候刚好合适"，是因为它根本不是一年前定的：每次重挂时按当时的钱包和总币数定，而他的币本位财富在价格翻 2.4 倍的 13 个月里只从 70.8 变到 74.6 BTC——按币数比例定的量天然跨周期稳定。反向合约还有一个机械效应：对冲同样多的 BTC，价格越高需要的张数越多，金字塔有一半是这么来的。</p>
+<h3>他改过这些单吗——改过，而且频繁</h3>
+<ul class="plain">
+<li>30,666：2023-02-27 挂 80K（市价 +31%）→ 03-09 撤 → 04-12 挂 15K（+2%）→ 04-14 成交；6 月又在 30,303–30,666 成交 2 万张。</li>
+<li>2023-02-16 一批 25,666 → 29,999 共 9 档 31 万张，挂了 21 天，03-09/10 全撤，没有一张成交。</li>
+<li>34,888：10-23 60K、10-25 10K、11-02 10K 三次成交——同一价位分三次补挂。</li>
+<li>57,777：2024-02-28 180K 之后，07-06 又在同价位卖 40K。38,945.5 与 60,538.5 不是他的模式价位，更像改价后的单。</li>
+<li>顶部整批换表：2024-05-01 撤 74.6–85.1K 12 档、2025-03-01 撤 92–124K 23 档、2025-11-14 撤 126.7–149.8K 10 档。</li>
+</ul>
+<p>2024–2025 牛市里他同样维持着远端卖单：2024-05-01 撤掉 74.6–85.1K（12 档、170 万张）、2025-03-01 撤掉 92–124K（23 档、361 万张）、2025-11-14 撤掉 126.7–149.8K（10 档、244 万张）——每次都是<strong>局部顶确认、价格回落后整批撤掉，换一套新锚点</strong>。这和 2021-04-16 撤 67.8–74.9K（29 档）、2021-12-07 撤 53.4–59.7K 是同一个动作。</p>
+
+<h2><span class="num">03 · 2023 年起的上涨</span>币本位为什么涨了又回撤</h2>
+<figure><img src="figures/fig1_wealth_drawdown.png" alt="2023-2026 BTC 价格、币本位 MTM 权益、净杠杆" width="1632" height="1245" loading="lazy"><figcaption>上：BTC 价格（对数）。中：币本位 MTM 权益，阴影是 ≥3% 回撤区间，点是回撤谷底。下：净仓位 / 交易所钱包，红为净空头。2023-10 那根绿柱（4.4× 多头）是他本轮最赚的一个月（+8.19 BTC）；之后 30 个月几乎一直净空。</figcaption></figure>
+
+<div class="tbl"><table>
+<thead><tr><th>峰</th><th>谷</th><th>深度</th><th>损失 (BTC)</th><th>BTC 价格变动</th><th>均净杠杆 (钱包)</th><th>均净杠杆 (总财富)</th><th>方向性</th><th>执行残差</th><th>收复天数</th></tr></thead>
+<tbody>
+<tr><td>2023-02-10</td><td>2023-03-14</td><td class="neg">−5.9%</td><td>−4.21</td><td>−3%</td><td>+0.90</td><td>+0.05</td><td>−0.73</td><td class="neg">−3.35</td><td>38</td></tr>
+<tr><td>2023-11-03</td><td>2024-01-12</td><td class="neg">−3.5%</td><td>−2.85</td><td>+32%</td><td>−0.14</td><td>−0.03</td><td>−2.62</td><td>+0.31</td><td>15</td></tr>
+<tr><td>2024-01-27</td><td>2024-03-13</td><td class="neg"><b>−8.9%</b></td><td>−7.26</td><td>+81%</td><td>−1.53</td><td>−0.23</td><td class="neg">−8.22</td><td>+1.01</td><td>51</td></tr>
+<tr><td>2024-05-03</td><td>2024-05-22</td><td class="neg">−5.4%</td><td>−4.51</td><td>+23%</td><td>−1.81</td><td>−0.34</td><td>−4.81</td><td>+1.47</td><td>37</td></tr>
+<tr><td>2024-07-09</td><td>2024-07-29</td><td class="neg">−4.2%</td><td>−3.56</td><td>+22%</td><td>−1.62</td><td>−0.35</td><td>−4.56</td><td>+1.48</td><td>9</td></tr>
+<tr><td>2024-08-09</td><td>2024-11-24</td><td class="neg"><b>−8.9%</b></td><td>−7.73</td><td>+80%</td><td>−0.92</td><td>−0.19</td><td class="neg">−8.95</td><td>+1.79</td><td>98</td></tr>
+<tr><td>2025-03-02</td><td>2025-03-04</td><td class="neg">−3.2%</td><td>−2.88</td><td>+12%</td><td>−1.46</td><td>−0.35</td><td>−3.29</td><td>+3.88</td><td>6</td></tr>
+<tr><td>2025-04-10</td><td>2025-10-08</td><td class="neg"><b>−8.8%</b></td><td>−8.38</td><td>+64%</td><td>−0.74</td><td>−0.20</td><td class="neg">−9.62</td><td>+2.15</td><td>115</td></tr>
+</tbody></table></div>
+<p>除 2023 年初那次（熊市末尾杠杆多头被震）以外，<strong>七次回撤全部是"BTC 上涨 + 净空头"</strong>；执行残差在这七次里全部为正，只是盖不住方向性亏损。每次回撤的收复都靠 BTC 随后下跌——2025-04→10 丢的 8.4 BTC，是 2025-10→2026-02 BTC 从 124.7K 跌到 62.8K 时才赚回来的。</p>
+
+<h3>月度归因：钱从哪来、往哪去</h3>
+<div class="tbl"><table>
+<thead><tr><th class="l">阶段（2023-10 → 2026-04）</th><th>方向性 (BTC)</th><th>执行残差 (BTC)</th><th>均净杠杆 (钱包)</th></tr></thead>
+<tbody>
+<tr><td class="l">日线 EMA15 &gt; EMA30（58% 的天数）</td><td class="neg">−15.18</td><td class="pos">+25.18</td><td>−0.66</td></tr>
+<tr><td class="l">日线 EMA15 &lt; EMA30（42%）</td><td class="neg">−9.37</td><td class="pos">+22.81</td><td>−0.81</td></tr>
+<tr><td class="l">资金费（净空头收正费率）</td><td class="pos">+2.47</td><td></td><td></td></tr>
+<tr><td class="l">手续费（2023–24 年 taker 占比 61%）</td><td class="neg">−2.64</td><td></td><td></td></tr>
+</tbody></table></div>
+<p>方向性在上行段亏、在下行段也亏（下行段里的 V 形反弹打在空头上），执行残差在两种环境下都稳定为正。最赚的月份是三类：<strong>周期启动月的杠杆多头</strong>（2023-10：+8.19，方向 +5.90）、<strong>下跌月的空头</strong>（2025-02/03：+9.34；2025-11：+3.48）、<strong>高波动横盘月的阶梯</strong>（2024-03：残差 +5.88；2024-11：+5.74；2025-03：+6.61）。</p>
+
+<h3>反事实：如果牛市阶段不扛净空头</h3>
+<div class="tbl"><table>
+<thead><tr><th class="l">变体（只缩放方向性分量，执行残差保留）</th><th>期末权益 (BTC)</th><th>区间收益 (BTC)</th><th>最大回撤</th></tr></thead>
+<tbody>
+<tr><td class="l">实际</td><td>95.83</td><td>+23.43</td><td class="neg">−8.9%</td></tr>
+<tr><td class="l">净空头上限 1.0× 钱包</td><td>105.76</td><td>+33.37</td><td>−8.4%</td></tr>
+<tr><td class="l">净空头上限 0.5× 钱包，仅在 EMA 多头段</td><td>107.79</td><td>+35.40</td><td>−7.8%</td></tr>
+<tr><td class="l">EMA 多头段不持净空头</td><td>110.71</td><td>+38.31</td><td>−7.2%</td></tr>
+<tr><td class="l">净空头上限 0.5× 钱包（全程）</td><td>117.24</td><td>+44.84</td><td>−6.2%</td></tr>
+<tr><td class="l">EOD 净仓位归零，只保留执行</td><td>120.38</td><td>+47.99</td><td class="pos">−4.3%</td></tr>
+</tbody></table></div>
+<p>这是上界估计（缩小库存会改变阶梯成交，残差不会原样保留），但方向明确：<strong>币本位目标下，牛市里的常驻净空头是回撤的唯一来源，也是收益的最大漏斗</strong>。它的全部价值只在周期顶之后兑现——而即使在那时，因为袖口只占总财富 20%，USD 本位回撤仍达 −44%（2025-10-08 → 2026-02-07）。对冲没有保住 USD，却在牛市里持续付了币。</p>
+
+<h2><span class="num">04 · 他的错</span>按代价排序，每一条对应一个可写进规则的教训</h2>
+<ul class="rule-list">
+  <li><span class="k">−38.1 BTC · −51%</span><div class="v"><b>2021-04-18 → 05-17：周期顶部 1.4–2.0× 杠杆多头，并在下跌中反复加回</b><small>04-18 钱包杠杆 1.54×（总财富口径 1.40×），04-20 加到 1.8×，04-23 砍到 0.9× 又在 04-26 加回 1.9×；05-13 再次 1.98× 多头，05-14 单日 −12.8% 的 K 线把 MTM 权益从 55.9 打到 38.7 BTC（<strong>一天 −17.2 BTC，−31%</strong>）。收复用了 137 天，且靠 05-21 之后的反弹。教训：杠杆多头只属于周期启动后的前 ~100 天；进入顶部区（价格在上一轮中枢带以上、阶梯卖单开始成交）后，多头杠杆上限应该单调下降，而不是逢跌加仓。</small></div></li>
+  <li><span class="k">−25.0 BTC · −27%</span><div class="v"><b>2022-02 → 11：小袖口里 11× 杠杆抄底</b><small>提走 60 BTC 后交易所钱包只剩 5–7 BTC（总财富 7–9%），但 2022-02 净空峰值 −6.1× 钱包、11 月 FTX 周多头 11.2× 钱包。全年币本位 −27%，其中已实现 −14.8、未实现 −10.2；直到 2025-03-12 才回到 2022-02 的高点，<strong>852 天</strong>。教训：袖口小不等于可以放大倍数，杠杆上限必须同时用"占总财富"和"占袖口"两个分母约束，取更严的那个。</small></div></li>
+  <li><span class="k">−13.0 BTC · −17%</span><div class="v"><b>2021-10-01 → 10-26：突破时净空 −0.7×</b><small>BTC 从 42K 涨到 67K（+47%），他的净空从 −0.48× 加到 −1.0×，方向性 −16 BTC，阶梯残差 +6 BTC 盖不住。10-17 才平掉空头。教训：净空头只能在周期顶确认之后建立，突破行情里的"高位挂空"必须有买回阶梯对冲库存，否则就是裸空。</small></div></li>
+  <li><span class="k">−22.9 BTC · 3 × −8.9%</span><div class="v"><b>2023-11 → 2026-04：常驻净空头贯穿整个牛市</b><small>30 个月里净空均值 −0.66×（多头段）/ −0.81×（空头段），三波主升浪各丢 7–8 BTC。对币本位目标来说这是最大的单项损耗；对 USD 目标来说它只覆盖了总财富的 20%，顶部回撤仍 −44%。教训：要么把对冲比例按总财富定（那就要 4–5 倍于现在的空头，袖口承受不了），要么承认它是币本位的成本、用周期阶段门控把它关掉——不能两头都要。</small></div></li>
+  <li><span class="k">−2.64 BTC · ≈10%</span><div class="v"><b>2023–2024 年 61% 的成交是吃单</b><small>2023-01→2026-04 手续费合计 2.64 BTC，约占同期币本位收益的 10%；maker 占比 2023–24 年多数月份只有 15–50%，2025 年以后才升到 60–100%（手续费降到每月 0.003–0.02 BTC）。教训：阶梯模型必须 post-only；他自己后来也是这么改的。</small></div></li>
+</ul>
+
+<h2><span class="num">05 · 回撤控制</span>从他的数据里直接读出来的六条规则</h2>
+<ul class="rule-list">
+  <li><span class="k">R1 分母</span><div class="v"><b>杠杆同时按"袖口"和"总币数"约束，取严</b><small>他的 −1.5× 钱包在总财富口径只是 −0.23×，看起来温和，但 2022-02 的 −6.1× 钱包在总财富口径是 −1.2×、2022-11 的 11× 钱包只有 0.5×——三个数字看起来都不极端，却都出了大事。建议袖口杠杆硬上限 2×（多）/ 1×（空），总币数口径 0.3× / 0.15×。</small></div></li>
+  <li><span class="k">R2 阶段门</span><div class="v"><b>净空头库存只在"顶部确认"之后允许为负，上行段强制对称</b><small>本轮七次回撤全部来自上行段净空。实现方式：卖单阶梯每成交一档，就在下方中枢带挂等量买回单（他 2023-10→2024-03 的 2,928 万 vs 2,888 万张就是这个形态），日终净库存不得低于 −0.5× 袖口；只有当价格进入上一轮顶部中枢带且周线结构转弱，才解除对称约束。</small></div></li>
+  <li><span class="k">R3 多头杠杆衰减</span><div class="v"><b>杠杆多头只给周期启动后的前 100 天，之后线性降到 0</b><small>2023-10 的 4.4× 钱包多头一个月赚 8.19 BTC；2021-04/05 的 1.5–2× 多头一个月亏 38 BTC。区别只在周期阶段。把上一轮实测的 84/84/110/87 天周期长度直接拿来当衰减期。</small></div></li>
+  <li><span class="k">R4 不逢跌加多</span><div class="v"><b>顶部区一次 −8% 以上的日 K 之后，当天禁止加多，次日只允许降杠杆</b><small>2021-04-23 / 04-26 / 05-13 三次"砍了又加回"把一次 −16% 的回撤放大成 −51%。</small></div></li>
+  <li><span class="k">R5 Post-only</span><div class="v"><b>阶梯全部 post-only，允许漏单</b><small>手续费占收益 10% 是可以一刀砍掉的回撤来源；他 2025 年 maker 占比 80–100% 时，单月手续费降到 0.01 BTC 量级。</small></div></li>
+  <li><span class="k">R6 预算</span><div class="v"><b>把"对冲成本"写成币本位预算：每波主升浪 ≤ 3% 袖口，总计 ≤ 5%/年</b><small>他实际每波付 8–9%。预算用尽 → 空头库存强制回到 R2 的对称状态，而不是靠 BTC 下跌来解套（2025 年那次等了 115 天、靠 −48% 的暴跌才回本）。</small></div></li>
+</ul>
+
+<h2><span class="num">06 · ETH 映射</span>同一方法，这一轮该怎么提前铺</h2>
+<div class="callout">
+  <p><strong>位置对照。</strong>ETH：2025-08-24 高点 4,958 → 2026-06-06 低点 1,504（−70%）→ 2026-08-22 收盘 2,423（反弹 +61%，距高点 2.05×）。BTC 截图时刻（2023-01-26，截图 K 线 O 22,910.5 / C 22,629.5 与日线吻合）：2021-11 高点 69,146 → 2022-11 低点 15,400（−78%）→ 22,911（反弹 +49%，距高点 3.0×）。<strong>ETH 现在几乎就是那张截图的时刻</strong>，区别是 ETH 已经反弹得更多、离上轮高点更近，所以阶梯的第一档要比 BTC 当年的 30,666（+34%）更近。 还要记住他在这个阶段<strong>没有囤币</strong>（见 §07）：币是靠换手和突破那一下赚的。</p>
+</div>
+<figure><img src="figures/fig3_eth_ladder.png" alt="ETH 2024-2025 价格时间密度与候选卖单阶梯" width="2124" height="1131" loading="lazy"><figcaption>左：ETH 2024–2025 每 100 USDT 区间占 4h K 线数的百分比。右：按同一方法（上轮中枢密度 × 重复数字锚点 × 随价递增）给出的候选卖单数量权重，示意。按每 100U 归一的密度排序：<b>2.4–2.8K 才是本轮密度最高的中枢（6.26%/100U，最密单桶 2,500–2,600 = 7.8%）</b>，3.0–3.6K 是现价上方最大的中枢（4.93%/100U），4.0–4.8K 是尖顶（1.22%/100U）。卖梯不在 2.4–2.8K 配重的原因见 §12 前注：脚下的中枢是成本区不是供给区，卖单只铺上方中枢。BTC 2021 年 54–62K 顶部区密度厚，ETH 顶部是尖的——这是两者结构上最大的不同。</figcaption></figure>
+
+<h3>候选卖单阶梯（权重合计 100%，单位 = 卖出篮子）</h3>
+<div class="tbl"><table>
+<thead><tr><th>价位</th><th>距现价</th><th>占 2025 高点</th><th>上轮密度 (±1.5%)</th><th>权重</th><th class="l">角色</th></tr></thead>
+<tbody>
+<tr><td>2,888</td><td>+19%</td><td>58%</td><td>低</td><td>4%</td><td class="l">第一档，相当于 BTC 的 23,800：试探，不指望成交量</td></tr>
+<tr><td>3,111 / 3,333 / 3,444 / 3,555</td><td>+28% → +47%</td><td>63–72%</td><td><b>高（中枢）</b></td><td>6 / 6 / 8 / 8</td><td class="l">本轮中枢带，相当于 BTC 的 32,888–35,999 簇（步长 3–7%）</td></tr>
+<tr><td>3,777 / 3,999</td><td>+56% / +65%</td><td>76% / 81%</td><td>中</td><td>6 / 8</td><td class="l">2025-07→10 的肩部，相当于 BTC 的 50,666 / 51,999</td></tr>
+<tr><td>4,222 / 4,444 / 4,666</td><td>+74% → +93%</td><td>85–94%</td><td>低–中</td><td>12 / <b>18</b> / 16</td><td class="l">顶部区，相当于 BTC 的 55,555 / 56,666 / 57,777；最重一档放在 4,444（上轮顶部区成交时间相对最多的 4,400–4,600）</td></tr>
+<tr><td>4,888</td><td>+102%</td><td>99%</td><td>极低</td><td>8</td><td class="l">相当于 BTC 的 60,539，封顶递减</td></tr>
+</tbody></table></div>
+<p>对应的斐波那契（1,504→4,958）：0.382 = 2,823、0.618 = 3,639、0.786 = 4,219——3,555 和 4,222 恰好贴着 0.618 / 0.786，和 BTC 那次一样是顺带命中。<strong>名义总量</strong>按他当年的比例取：卖单篮子 ≈ 袖口的 3×（币本位名义），但 ≤ 总持币的 0.2×；袖口本身 ≤ 总持币 20%。</p>
+
+<h3>他没做、但你应该做的三件事</h3>
+<ul class="plain">
+  <li><strong>买回阶梯同时铺。</strong>每档卖单下方 8–12%（中枢带下沿）挂同量买回单；日终净库存受 R2 约束。这把"常驻空头"变成"高卖低买的库存循环"，是本轮把 −8.9% 变成 −4% 量级的关键。</li>
+  <li><strong>写死的是价位词汇表和按币数分配的规则，不是挂单本身。</strong>挂单做成跟随市价的滚动带（0～+25%，每档数量 = 当时总币数 × 该中枢的权重），程序化 cancel-replace；远端只放占位小单。不要试图一年前把张数定死——他自己也没有这么做，反向合约的张数本来就要随价格重算。</li>
+  <li><strong>ETH 的顶部区是尖的，所以最后三档权重要比他当年的 BTC 顶部更保守。</strong>上轮 ETH 在 4.4K 以上只待了 4.4% 的时间，4.8K 以上 0.1%；把 4,888 那档当作"可能永远不成交"的单。</li>
+</ul>
+
+
+<h2><span class="num">07 · 阶段参数</span>ETH 现在对应他的 P0，他在 P0 做了什么、突破那天做了什么</h2>
+<p>把 2023-01 起的 1,203 天按周期阶段切成四段（cycle-IN 用四个已验证金叉日 2023-10-02 / 2024-02-05 / 2024-09-20 / 2025-04-22 各 + 101 天），每段的活动强度、库存方向、挂单带位置如下。2024 年以后"距市价"只对<strong>被撤的单</strong>有意义（它记录的是刷新时未成交档位的位置），成交单的距离在成交时刻天然接近零，表里不列。</p>
+<div class="tbl"><table>
+<thead><tr><th class="l">参数</th><th>P0 底部震荡<br>2023-01→10-13</th><th>P1 cycle-IN<br>4 段 × 101 天</th><th>P2 cycle-OUT<br>其余</th><th>P3 顶后下跌<br>2025-10→2026-02</th></tr></thead>
+<tbody>
+<tr><td class="l">天数 / 平均钱包 (BTC)</td><td>286 / 5.0</td><td>392 / 16.1</td><td>402 / 20.9</td><td>123 / 26.2</td></tr>
+<tr><td class="l">净杠杆（钱包口径）均值 [p10, p90]</td><td><b>+0.02</b> [−0.98, +0.78]</td><td>−0.60 [−1.62, +0.42]</td><td>−0.93 [−1.64, −0.30]</td><td>−0.42 [−0.81, +0.01]</td></tr>
+<tr><td class="l">被撤卖单距市价 p50 / p90</td><td>+3.3% / +17%</td><td>+1.3% / +6.7%</td><td>+2.5% / +25%</td><td>+25% / +47%</td></tr>
+<tr><td class="l">被撤买单距市价 p50 / p90</td><td>−2.6% / +1.4%</td><td>−7.6% / −0.1%</td><td>−0.3% / +0.8%</td><td>−2.2% / −0.6%</td></tr>
+<tr><td class="l">每日成交单数 / 撤单数</td><td>3.6 / 1.6</td><td>5.2 / 1.6</td><td>2.9 / 0.4</td><td>2.4 / 0.4</td></tr>
+<tr><td class="l">单档成交量中位（占钱包，币本位）</td><td>13%</td><td>3.6%</td><td>3.0%</td><td>1.2%</td></tr>
+<tr><td class="l">月换手（双边成交 / 钱包）</td><td><b>35×</b></td><td>11×</td><td>5.1×</td><td>1.4×</td></tr>
+<tr><td class="l">批次结构（档数中位 / 档间步长）</td><td>5 档 / 0.13–0.22%</td><td>4 档 / 0.20–0.28%</td><td>3–4 档 / 0.29–0.47%</td><td>3 档 / 0.52–0.70%</td></tr>
+<tr><td class="l">maker 占比</td><td>36%</td><td>37%</td><td>36%</td><td><b>90%</b></td></tr>
+<tr><td class="l">阶段币本位增量 (BTC)</td><td>+4.7</td><td>+13.1</td><td><b>+16.9</b></td><td>+9.0</td></tr>
+</tbody></table></div>
+<p>三条读法：<strong>① P0 不是囤币期。</strong>净杠杆均值 0.02，钱包 5 BTC 以 35× 月换手做 ±3% 的高频阶梯，9.5 个月只多出 4.7 BTC（其中一部分还是 10 月初的空头收益）。<strong>② 活动强度随周期单调下降</strong>：换手 35× → 11× → 5× → 1.4×，单档 13% → 1.2%，钱包越大越克制。<strong>③ 即便在 cycle-IN，他的平均库存也是净空（−0.60）</strong>——多头只在四段里的第一段（2023-10）的前十天出现过。</p>
+
+<h3>突破那一次：2023-10-16 → 10-17 逐小时</h3>
+<div class="tbl"><table>
+<thead><tr><th class="l">时刻 (UTC)</th><th>买 (张)</th><th>卖 (张)</th><th>VWAP</th><th>吃单比例</th><th class="l">发生了什么</th></tr></thead>
+<tbody>
+<tr><td class="l">10-16 05:00–12:00</td><td>0</td><td>55,000</td><td>27,3xx–27,8xx</td><td>—</td><td class="l">三个月区间顶部（28.5K）之下继续铺空，EOD 前一日已 −1.27×</td></tr>
+<tr><td class="l">10-16 13:00</td><td><b>642,000</b></td><td>30,000</td><td>28,485</td><td>74%</td><td class="l">假 ETF 获批消息冲到 30.5K 的那一小时，吃单追多</td></tr>
+<tr><td class="l">10-16 14:00–19:00</td><td>0</td><td><b>900,000</b></td><td>27,937 → 28,706</td><td>22–100%</td><td class="l">消息证伪回落，追进去的多头反手卖掉并加空，EOD −49 万张（−2.46×）</td></tr>
+<tr><td class="l">10-17 07:00–14:00</td><td>300,000</td><td>480,000</td><td>28,2xx–28,5xx</td><td>—</td><td class="l">价格在 28.2–28.6K 站稳一整天，空头还在</td></tr>
+<tr><td class="l">10-17 16:00–18:00</td><td><b>1,460,400</b></td><td>0</td><td>28,467–28,576</td><td>64–91%</td><td class="l">日线在区间顶上方收住后，两小时内吃单翻到 +79 万张（<b>4.37× 钱包 / 0.39× 总币数</b>）</td></tr>
+<tr><td class="l">10-18 → 10-26</td><td colspan="4">沿 32,888 / 33,888 / 34,888 / 35,999 减仓</td><td class="l">杠杆 4.4× → 1.3×，钱包 6.7 → 12.2 BTC，权益 71.4 → 81.7 BTC（+10.3，17 天）</td></tr>
+</tbody></table></div>
+<p>这是整个 2023–2026 唯一一次他主动用杠杆多头，并且是用吃单完成的——他全程 36% 的 maker 占比里，这一天是有意为之的例外。付出的学费也在账上：10-16 追涨再反手的那一轮，加上 10-17 翻仓前扛的空头，让权益从 74.6 先跌到 71.4（−3.2 BTC）再起飞。</p>
+
+<h3>对应到 ETH 现在（P0 形态）的动作清单</h3>
+<ul class="plain">
+  <li><strong>不要在 P0 囤币也不要做方向。</strong>他的 P0 是净杠杆 ≈ 0 的 ±3% 高频阶梯（5 档、步长 0.1–0.2%、每档 ≤ 钱包 13%），靠换手而不是靠方向；远端 +17% 以上的卖单只是占位，成交率 3%。</li>
+  <li><strong>突破赌注要预先写死三件事</strong>：触发（日线收在三个月区间顶之上并站稳一日；或日线 EMA15/30 金叉 + 周期结构评分）、规模（≤ 4× 袖口且 ≤ 0.4× 总币数，他的实际值 4.37× / 0.39×）、减仓表（第 2 天起沿锚点词汇表逐档卖，10 天内回到 ≤ 2×）。允许这一单吃单。</li>
+  <li><strong>不要在区间顶下方铺空。</strong>他 10-13 → 10-16 在顶部下方把空头从 −1.05× 加到 −2.46×，等突破来时先亏 3.2 BTC 再翻身；R2 的阶段门应在价格距区间顶 &lt;3% 时把净空上限收到 −0.5×。</li>
+  <li><strong>P1 之后库存自然转负，但要按 R6 的预算控制</strong>：他 P1 平均 −0.60、P2 −0.93，是 −8.9% 回撤的来源；P2 的币本位增量 +16.9 来自阶梯而非空头方向（方向性在 P2 为负）。</li>
+</ul>
+
+
+<h2><span class="num">08 · 时间对齐</span>BTC 2023-01 vs ETH 现在：100 天窗口标注与决策脚本</h2>
+<figure><img src="figures/fig4_cycle_alignment.png" alt="BTC 2022-11 见底后与 ETH 2026-06 见底后的对齐图，标注 100 天窗口" width="1807" height="1063" loading="lazy"><figcaption>x = 距（候选）底部天数，y = 收盘价 ÷ 底部价；右轴把同一倍数换算成 ETH 价格（×1,504）。蓝色阴影是 BTC 实际走出来的两个 ~100 天窗口：迷你周期（金叉 day 50 → 顶 day 142，金叉后 92 天）和 cycle #1（金叉 day 314 + 101 天）；橙色阴影是 ETH 当前金叉（07-13，day 37）+ 92~110 天的到期投影 ≈ 2026-10-13 → 10-31。</figcaption></figure>
+<p>对齐的锚不是价格是结构：BTC 候选底 2022-11-23，ETH 候选底 2026-06-06（与 BTC 侧周期监控给出的候选底同日）。两边都是：熊市里几次金叉全部失败（BTC 2022 年多次；ETH 2026 年 1/3/4 月三次）→ 见底后第一个金叉才走出迷你周期（BTC day 50，ETH day 37）。今天 ETH 在 day 77、金叉后 40 天、1.61×——BTC 同日龄是 1.48×（22,756），<strong>ETH 比类比剧本热 8%，金叉也早 13 天</strong>，所以到期窗口宁可从金叉起算（10-13 → 10-31），距底 142 天（10-26）落在同一窗口内。</p>
+
+<h3>价位映射：BTC 当年的决策位 → ETH（按距底倍数 ×1,504）</h3>
+<div class="tbl"><table>
+<thead><tr><th class="l">BTC 事件（2023）</th><th>BTC 价</th><th>距底倍数</th><th>ETH 映射价</th><th class="l">对照 / 动作含义</th></tr></thead>
+<tbody>
+<tr><td class="l">候选底（day 0）</td><td>15,400</td><td>1.00</td><td>1,504</td><td class="l">已发生（2026-06-06）</td></tr>
+<tr><td class="l">首个有效金叉（day 50）</td><td>17,443</td><td>1.13</td><td>1,704</td><td class="l">ETH 实际金叉 day 37 @ 2,059（1.37×）——更早更高</td></tr>
+<tr><td class="l">01-25 小卖 23,800×8K（day 63）</td><td>23,800</td><td>1.55</td><td>2,325</td><td class="l">已越过：ETH 现价 2,423 = 1.61×</td></tr>
+<tr><td class="l">今天同日龄（day 77 = 2023-02-08）</td><td>22,756</td><td>1.48</td><td>2,223</td><td class="l">ETH 实际 2,423，偏热 +8%</td></tr>
+<tr><td class="l">迷你周期顶（day 142 = 04-14，卖 30,666×15K）</td><td>29,903</td><td>1.94</td><td><b>2,921</b></td><td class="l">词汇表 2,888 第一档的位置；到期窗口 10-13→10-31 内小卖 ≈ 袖口 10%</td></tr>
+<tr><td class="l">夏季箱体（day 142→313）</td><td>25,109–31,470</td><td>1.63–2.04</td><td>2,453–3,074</td><td class="l">预期 2026-11 → 2027-03 的换手区；净杠杆 0</td></tr>
+<tr><td class="l">突破站稳区（day 328，10-17 吃单翻多 4.4×）</td><td>≈28,500</td><td>1.85</td><td><b>2,784</b></td><td class="l">下一轮 cycle 触发的量级参考；只按信号不按价</td></tr>
+<tr><td class="l">首减仓簇 32,888–35,999（day 334–346）</td><td>—</td><td>2.14–2.34</td><td>3,213–3,517</td><td class="l">与 §06 词汇表 3,111–3,555 簇吻合</td></tr>
+<tr><td class="l">主升浪顶部簇 55,555–60,539（day 462+）</td><td>—</td><td>3.61–3.93</td><td>5,427–5,914</td><td class="l">⚠ 倍数口径高于 ETH 前高 4,958。ETH 熊更浅（−70% vs −78%），顶部锚点应沿用他的做法按<strong>上一轮中枢</strong>定（§06 的 4,222–4,888 簇），倍数映射只作上界参考</td></tr>
+</tbody></table></div>
+
+<h3>决策脚本（按触发排序，不按日历）</h3>
+<ul class="rule-list">
+  <li><span class="k">现在 → 到期窗</span><div class="v"><b>day 77–129：P0 换手带 + 轻多倾斜</b><small>±3% 五档换手带；净杠杆倾斜 ≤ +0.6× 袖口（他 2023-01→03 月均 +0.62～+0.70）；不追价；三个月箱体顶（2,52x–2,55x）之下 3% 以内禁加空（他在区间顶下加空到 −2.46×，突破时先亏 3.2 BTC 的学费）。</small></div></li>
+  <li><span class="k">10-13 → 10-31</span><div class="v"><b>到期窗口：第一档小卖 + 撤倾斜</b><small>金叉 +92~110 天与距底 142 天同落此窗。价格若达 2,888–2,92x（映射的迷你周期顶），按他 04-14 的比例卖 ≈ 袖口 10% 的小单；窗口内日线收破 EMA30 → 多倾斜清零，回到净 0。这不是顶部判断，是把"100 天效应"当作撤火信号而非做空信号——他在 day 142 之后也没有做空，只是不再多。</small></div></li>
+  <li><span class="k">箱体期</span><div class="v"><b>预期 2,45x–3,07x 箱体数月：纯换手</b><small>BTC 的对应段（day 142→313）横了 171 天。净杠杆 0，靠阶梯养袖口；若 ETH 不回头直接走强，不追——等下一条的信号，宁可错过（他 2023 夏天两次金叉 06-23/死叉 07-31 都没让他改变仓位结构）。</small></div></li>
+  <li><span class="k">cycle 触发</span><div class="v"><b>新金叉 + 评分通过 + 日线收上箱体顶站稳一日 → 集中多</b><small>三条件齐 → 允许吃单，≤ 4× 袖口且 ≤ 0.4× 总币数（他 10-17 的 4.37× / 0.39×）；第 2 天起沿 3,111/3,333/3,444/3,555 逐档减，10 天内回到 ≤2×。这是全程唯一一次主动方向 + 唯一一次允许吃单。</small></div></li>
+  <li><span class="k">作废条件</span><div class="v"><b>映射整体作废的三种情况</b><small>① ETH 日线收破 1,504（候选底证伪 → 重新锚定）；② BTC 侧的周期证伪信号任一触发；③ 到期窗口过后 ETH 仍无回调直接创 3 个月新高持续两周——说明本轮不走 2023 剧本，回到纯 P0 规则运行，放弃日历投影。</small></div></li>
+</ul>
+<p class="caveat" style="border-top:none;padding-top:0;margin-top:.6rem">类比样本 n=1；"100 天"是 BTC 上一轮的经验（金叉→顶 92 天；cycle-IN 84/84/110/87 天），ETH 未独立验证；映射价只是先验，操作触发一律以 ETH 自身结构（金叉、箱体顶、EMA30）为准。</p>
+
+
+<h2><span class="num">09 · 错误驱动的策略修正</span>只看 2023-01 → 04：他在这个阶段错在哪，ETH 现在怎么改</h2>
+<p>2023 年 1–4 月正是 ETH 当前所处的"金叉后迷你周期"段。这四个月他的币本位只赚了 <span class="mono">+1.65 BTC</span>（1 月 +1.64、2 月 −1.20、3 月 +0.97、4 月 +0.24），而账本里可辨认的三类错误合计约 <span class="mono">−7 BTC</span>、手续费 −0.59——错误的代价是同期净收益的 4 倍。逐笔看：</p>
+<div class="tbl"><table>
+<thead><tr><th class="l">错误</th><th>代价</th><th class="l">账本细节</th></tr></thead>
+<tbody>
+<tr><td class="l"><b>M1 事件夜杠杆抄底，恐慌价砍在最低点</b></td><td class="neg">−3.42 BTC<br>（单日，钱包 5.2→1.9）</td><td class="l">USDC 脱锚夜 03-09 18:00–20:00 限价买 62 万张 @ 21,0xx–20,7xx，杠杆推到 <b>6.64×</b>（钱包仅 3 BTC）；20:55 起改用市价连环砍（169 笔市价卖，20,342 → 19,867，含终端"Position Close"一键平仓；<b>非强平</b>，数据无 Liquidation 行）。六天后 BTC +36%。同类尖峰还有 01-09 的 3.7×、01-27 的 <b>10.42×</b>（112 万张 @ 23K，侥幸未出事）、02-12 的 6.4×（2 月回撤起点）。</td></tr>
+<tr><td class="l"><b>M2 割肉后 V 型反转里追单</b></td><td class="neg">−2.73 BTC<br>（两天）</td><td class="l">03-14（+7.6% 大阳）从 flat 起日内追到 5.3× 又缩回，当日 −1.48；03-17 再追到 3.3×，当日 −1.25。两天都是"当天从零开始的吃单方向仓"。</td></tr>
+<tr><td class="l"><b>M3 恐慌夜撤掉整条卖单带</b></td><td class="neg">整条带踏空<br>（规模缩至 19%）</td><td class="l">02-16 挂好的 25,666→29,999 九档 31 万张卖带，03-09/10 恐慌中全部撤销。此后价格在 03-16 → 04-13 <b>逐档穿过全部九档</b>（25,666/26,333 于 03-16，29,999 于 04-13）；重挂时只剩 15K @ 30,666 = 原 80K 的 19%。撤单的那晚正是这条带即将开始工作的前夜。</td></tr>
+<tr><td class="l"><b>M4 吃单换手烧费</b></td><td class="neg">−0.59 BTC<br>（1–4 月）</td><td class="l">1 月 0.203、3 月 0.206 BTC，单月最高 ≈ 袖口的 4%；maker 占比仅 29–54%。M1/M2 的砍仓与追单几乎全是市价单。P0 全段手续费 0.98 BTC = 阶段收益 6.55 的 15%。</td></tr>
+</tbody></table></div>
+<p>对照组——同一窗口他做对的三件事，保留不动：01-25 第一档小卖 23,800×8K；03-11→13 割完后三天保持 flat，没有反手追空；04-12 在 +2% 处重挂 30,666 并于 04-14 顶部当天成交。</p>
+
+<h3>由此对当前 ETH 计划（§08 脚本）的五条修正</h3>
+<ul class="rule-list">
+  <li><span class="k">O1 杠杆硬顶</span><div class="v"><b>P0 期任意时刻 |净杠杆| ≤ 1.5× 袖口；事件状态降到 0.5×</b><small>替代原"轻多倾斜 ≤ +0.6×"里未写明的上限。事件状态定义：1h 跌幅 >4%，或稳定币脱锚/交易所异常类消息。他 1–4 月四次 ≥3.4× 尖峰，两次直接对应两笔最大亏损；若 03-09 受 1.5× 约束，03-10 的 −3.42 按比例 ≈ −0.8。事件夜只允许既有阶梯成交，<b>禁止新开抄底单</b>——抄底让位于"带子还挂着"。</small></div></li>
+  <li><span class="k">O2 预定义撤退</span><div class="v"><b>每档买入挂出时同时登记撤退价（−6%），触发用限价分片，永不市价连环砍</b><small>他的止损是事后 169 笔市价单割在 V 底。1.5× 上限下，−6% 一夜只伤袖口 9%，多数情况根本不需要砍——上限约束本身就是主风控，撤退线只是兜底。</small></div></li>
+  <li><span class="k">O3 暴动日熔断</span><div class="v"><b>|日收益| >5% 或日振幅 >8%：当日禁吃单、禁新方向仓，只让既有 maker 单成交</b><small>03-14 / 03-17 两天 −2.73 BTC 全是当日从 flat 追进去的。ETH 迷你周期里 V 型日只会更多。次日按 §08 脚本重估，错过第一天的追涨是这条规则的已知成本。</small></div></li>
+  <li><span class="k">O4 带子冻结</span><div class="v"><b>卖单带只在每周固定时点或箱体重定义时 cancel-replace；事件日冻结；重挂规模 ≥ 原表 80%</b><small>他撤掉的九档带在其后四周被逐档穿过，重挂只剩 19%。ETH 对应：2,888–2,92x 第一档与上方占位单，遇到类似 USDC 的夜晚不许动——恐慌时唯一允许的动作是降杠杆（O1），不是撤单。</small></div></li>
+  <li><span class="k">O5 费用预算</span><div class="v"><b>全带 post-only；月换手 ≤ 15× 袖口；taker 额度只留给 cycle 触发那一次</b><small>他 P0 换手 35×/月、maker 37%，费用吃掉阶段收益 15%；2025 年他自己改到 maker 80–100% 后月费用降一个数量级。月费用预算 ≤ 0.5% 袖口，超了就缩带宽。</small></div></li>
+</ul>
+<p>合并后的优先级：<strong>O1 杠杆硬顶 &gt; O3 熔断 &gt; O4 带子冻结 &gt; O2 撤退线 &gt; O5 费用</strong>。前三条针对的是他 1–4 月全部三笔大亏的共同结构：<em>事件冲击 → 杠杆放大 → 恐慌反应（砍仓/撤带）→ V 型反转打脸</em>。规则的本质是把"恐慌时刻允许做的动作"收缩到只剩一个：降杠杆。</p>
+
+
+<h2><span class="num">10 · 对冲视角（修正）</span>净空不是做空，是"卖梯子 = 加对冲"；对冲比例由价格位置决定</h2>
+<div class="callout">
+  <p><strong>前面几节的一处口径修正。</strong>BitMEX 是单向持仓：同一批卖单先把多单减到零，继续成交就自然变成净空。所以"净空 −0.4×"在效力上<strong>等于把 40% 的现货敞口对冲掉</strong>，净美元敞口 = 1 − h，而不是一笔方向性空单。§04/§05 把牛市里的净空称作"成本"在币本位账上没错（涨的时候它确实让币变少），但把它读成"做空"是窄了——它是<strong>用合约把一部分现货换成锁定的美元价值</strong>，也就是他"高卖低买、币越滚越多"的那条腿。</p>
+</div>
+<p>用对冲比例 <span class="mono">h = −合约名义 ÷ 总币市值</span> 重新看他 2023-01 → 2026-04 的全部 1,203 天，规律非常整齐：<strong>h 不是常数，是"价格离上一轮高点多远"的函数</strong>。</p>
+<div class="tbl"><table>
+<thead><tr><th class="l">价格 / 上轮高点</th><th>天数</th><th>对冲比例 h 中位</th><th>h 的 p75</th><th>净美元敞口 1−h</th><th class="l">映射到 ETH（前高 4,958）</th></tr></thead>
+<tbody>
+<tr><td class="l">&lt; 35%</td><td>68</td><td>−0.02</td><td>0.00</td><td>1.02</td><td class="l">&lt; 1,735</td></tr>
+<tr><td class="l">35–50%</td><td>237</td><td><b>0.00</b></td><td>0.05</td><td>1.00</td><td class="l">1,735–2,479 ← <b>ETH 现价 2,460 = 49.6%</b></td></tr>
+<tr><td class="l">50–65%</td><td>95</td><td>0.11</td><td>0.17</td><td>0.89</td><td class="l">2,479–3,223</td></tr>
+<tr><td class="l">65–80%</td><td>29</td><td><b>0.23</b></td><td>0.32</td><td>0.77</td><td class="l">3,223–3,966（对冲最重的区）</td></tr>
+<tr><td class="l">80–100%</td><td>252</td><td>0.19</td><td>0.32</td><td>0.81</td><td class="l">3,966–4,958</td></tr>
+<tr><td class="l">&gt; 100%</td><td>522</td><td>0.15–0.18</td><td>0.24</td><td>0.83</td><td class="l">&gt; 4,958</td></tr>
+</tbody></table></div>
+<p>两个关键事实：<strong>① 他从来没有把自己对冲成净空</strong>——h 中位始终在 0.1–0.25，最高只到 0.5–0.59 且极短暂，净美元敞口永远是正的。<strong>② 价格低于上轮高点一半时，他的 h 基本是 0。</strong>ETH 现价 2,460 = 前高的 49.6%，正好卡在这条线上——所以"现在就换成现货 + 0.4 空"在他的排程里<strong>提前了整整一档区间</strong>。</p>
+
+<h3>梯子就是对冲排程表</h3>
+<p>§06 那张卖单梯子，换算成对冲比例后与他的实测排程几乎重合（篮子取总币的 40–50%）：</p>
+<div class="tbl"><table>
+<thead><tr><th>ETH 价位</th><th>占前高</th><th>本档权重</th><th>累计篮子</th><th>对冲比例 h<br>（篮子 = 45% 总币）</th><th>他在该区的实测 h</th></tr></thead>
+<tbody>
+<tr><td>2,888</td><td>58%</td><td>4%</td><td>4%</td><td>0.02</td><td rowspan="2">0.11（50–65% 区）</td></tr>
+<tr><td>3,111</td><td>63%</td><td>6%</td><td>10%</td><td>0.05</td></tr>
+<tr><td>3,333 / 3,444 / 3,555</td><td>67–72%</td><td>6/8/8%</td><td>32%</td><td>0.14</td><td rowspan="2">0.23（65–80% 区）</td></tr>
+<tr><td>3,777</td><td>76%</td><td>6%</td><td>38%</td><td>0.17</td></tr>
+<tr><td>3,999</td><td>81%</td><td>8%</td><td>46%</td><td><b>0.21</b></td><td rowspan="4">0.19（80–100% 区）</td></tr>
+<tr><td>4,222</td><td>85%</td><td>12%</td><td>58%</td><td>0.26</td></tr>
+<tr><td>4,444</td><td>90%</td><td>18%</td><td>76%</td><td>0.34</td></tr>
+<tr><td>4,666 / 4,888</td><td>94–99%</td><td>16/8%</td><td>100%</td><td>0.45（上限）</td></tr>
+</tbody></table></div>
+
+<h3>"如果突然猛力上涨"——三种做法的实际结果</h3>
+<p>假设总币 100 ETH、现价 2,460。A = 完全不对冲；B = 现在就上 0.4 对冲；C = 按梯子逐档加对冲（篮子 45%）。</p>
+<div class="tbl"><table>
+<thead><tr><th>ETH 价格</th><th>涨跌</th><th>A 币数 / 美元(K)</th><th>B 币数 / 美元(K)</th><th>C 币数 / 美元(K)</th><th class="l">C 此时的对冲比例</th></tr></thead>
+<tbody>
+<tr><td>1,800</td><td class="neg">−27%</td><td>100.0 / 180</td><td class="pos">114.7 / 206</td><td>100.0 / 180</td><td class="l">0%（一档没成交）</td></tr>
+<tr><td>2,100</td><td class="neg">−15%</td><td>100.0 / 210</td><td class="pos">106.9 / 224</td><td>100.0 / 210</td><td class="l">0%</td></tr>
+<tr><td>2,888</td><td class="pos">+17%</td><td>100.0 / 289</td><td>94.1 / 272</td><td>100.0 / 289</td><td class="l">2%</td></tr>
+<tr><td>3,555</td><td class="pos">+45%</td><td>100.0 / 356</td><td>87.7 / 312</td><td>99.0 / 352</td><td class="l">14%</td></tr>
+<tr><td>3,999</td><td class="pos">+63%</td><td>100.0 / 400</td><td>84.6 / 338</td><td>97.4 / 390</td><td class="l">21%</td></tr>
+<tr><td>4,444</td><td class="pos">+81%</td><td>100.0 / 444</td><td>82.1 / <b>365</b></td><td>95.3 / <b>424</b></td><td class="l">34%</td></tr>
+<tr><td>4,958</td><td class="pos">+102%</td><td>100.0 / 496</td><td>79.8 / 396</td><td>91.8 / 455</td><td class="l">45%（满仓对冲）</td></tr>
+</tbody></table></div>
+<p>猛涨到 +81% 时：梯子对冲只比完全不对冲少 4.5% 的美元（424 vs 444），而<strong>现在就上 0.4 对冲要少 18%</strong>（365 vs 444）——差距 59K，等于 24 个 ETH。反过来跌到 −27% 时，0.4 对冲能让币数从 100 变成 114.7——对冲本身没有错，<strong>错的是在价格只走到前高一半时就把它加满</strong>。梯子的意义就是让 h 随价格自动爬升：涨得越猛，对冲加得越快，而净敞口 1−h 全程为正，所以<strong>猛涨你一直在赚，只是赚得递减</strong>；这正是设计目的，不是需要抢救的意外。</p>
+
+<h3>一个容易被忽略的执行约束：袖口必须跟着对冲一起长大</h3>
+<div class="tbl"><table>
+<thead><tr><th class="l">时点</th><th>总币</th><th>袖口</th><th>袖口占比</th><th>对冲比例 h</th><th>袖口空头杠杆</th></tr></thead>
+<tbody>
+<tr><td class="l">2023-01-20（P0）</td><td>70.5</td><td>4.4</td><td>6%</td><td>+0.01</td><td>0.18</td></tr>
+<tr><td class="l">2023-10-23（突破后）</td><td>74.9</td><td>8.9</td><td>12%</td><td>−0.32（净多）</td><td>—</td></tr>
+<tr><td class="l">2024-06-30</td><td>81.5</td><td>15.5</td><td>19%</td><td>+0.27</td><td>1.41</td></tr>
+<tr><td class="l">2025-01-02</td><td>82.8</td><td>16.8</td><td>20%</td><td>+0.12</td><td>0.58</td></tr>
+<tr><td class="l">2026-04-14</td><td>96.4</td><td>30.4</td><td>32%</td><td>+0.19</td><td>0.60</td></tr>
+</tbody></table></div>
+<p>他的袖口从总币的 6% 一路喂到 32%，就是为了支撑越来越大的对冲——<strong>h 每加 0.1，袖口就得跟着补</strong>，否则袖口层面的空头杠杆会失控。他全程把袖口空头杠杆压在 1× 左右（最高 2.9×）。对 ETH 的含义：想在 3,999 做到 h=0.21，袖口至少要是总币的 20%，否则袖口杠杆会超过 1×；<strong>加对冲之前先加袖口，顺序不能反</strong>。</p>
+<p>两条硬上限：<strong>h ≤ 0.45</strong>（净美元敞口永不低于 0.55×，他实测中位 0.1–0.25、极值 0.5）；<strong>袖口空头杠杆 ≤ 2×</strong>（反向合约的空头在价格上涨时亏币且亏损加速，这条比 h 更致命）。</p>
+
+
+<h2><span class="num">11 · 真实挂法还原</span>2023 年 1–4 月：他到底怎么下单（含两处前文更正）</h2>
+<p>这四个月的下单时间戳是可信的（失真从 2024 年开始），所以能逐笔还原。1,154 笔委托：<strong>限价 986 笔（85%）、市价 164 笔（14%）、止损 4 笔</strong>。下面全部基于这 986 笔限价单。</p>
+
+<div class="callout">
+  <p><strong>更正一：他不是每天挂单，120 天里有 53 天一笔没挂。</strong>挂单与否由波动率决定——日振幅 &lt;3% 的天数只有 41% 会挂单（中位 0 笔）；振幅 &gt;4% 的天数 68% 会挂，中位 4–6 笔、中位 8.4 万张。前文"每天维持梳子"的说法不成立，正确的说法是<strong>波动来了才铺网，没波动就空仓等着</strong>。</p>
+  <p><strong>更正二："数量随距离递增"只适用于远端，近端网格是等量的。</strong>前文那个"80% 批次数量与距离正相关"是 30 分钟聚合窗口造成的伪影——它把同一天的多个近端网格并成一个假的宽批次。用 5 分钟窗口重切后，<strong>近端网格 76% 是等量单，末档/首档中位 1.0 倍</strong>；金字塔只出现在跨度 &gt;2% 的远端批次里。</p>
+</div>
+
+<h3>两种完全不同的挂单结构</h3>
+<div class="tbl"><table>
+<thead><tr><th class="l">特征</th><th>I 近端密网（80 批，69%）</th><th>II 远端金字塔（36 批，31%）</th></tr></thead>
+<tbody>
+<tr><td class="l">档数中位</td><td>5</td><td>8</td></tr>
+<tr><td class="l">档距中位</td><td><b>0.11%</b></td><td>0.73%</td></tr>
+<tr><td class="l">整批跨度</td><td><b>0.55%</b></td><td>4.2%（&gt;5% 的极端批到 13.5%）</td></tr>
+<tr><td class="l">最近档 / 最远档 距市价</td><td>0.67% / 0.95%</td><td>2.3% / 7.6%</td></tr>
+<tr><td class="l">规模形态</td><td><b>等量</b>（76% 批次）末/首 = 1.0×</td><td><b>金字塔</b> 末/首 = 3.4×（远端批 8×）</td></tr>
+<tr><td class="l">单档规模</td><td colspan="2" style="text-align:center">中位 <b>0.22 × 袖口市值</b>（2 万张 / 袖口约 11 万美元），p75 = 0.48×</td></tr>
+<tr><td class="l">整批规模</td><td>1.12 × 袖口</td><td>1.93 × 袖口</td></tr>
+<tr><td class="l">成交率 / 撤单率</td><td><b>75% / 25%</b></td><td>39% / 61%（远端批 15% / 85%）</td></tr>
+<tr><td class="l">寿命中位</td><td><b>17 分钟</b></td><td>34 小时</td></tr>
+<tr><td class="l">角色</td><td>赚钱的引擎</td><td>埋伏，多数被撤掉</td></tr>
+</tbody></table></div>
+
+<h3>成交有多快</h3>
+<p><strong>33% 的限价单在 1 分钟内成交，49% 在 10 分钟内，68% 在 1 小时内，只有 10% 挂过 24 小时</strong>（按张数加权：64% 在 10 分钟内成交）。这不是"挂着等"的被动做市，是<strong>贴着盘口打，成交完立刻再铺一层</strong>。买单中位挂在市价下方 1.36%，卖单中位挂在上方 0.63%——卖比买更贴身，因为他多数时间在减手上的多头。</p>
+
+<h3>两个真实的日子</h3>
+<p><strong>2023-04-11（平静日，12 笔）</strong>——全天只有两批买单，其余时间不动：</p>
+<div class="tbl"><table>
+<thead><tr><th>时间</th><th>价位</th><th>张数</th><th>档距</th><th>结果</th></tr></thead>
+<tbody>
+<tr><td>19:11</td><td>30,236.5 / 30,174 / 30,124 / 30,099 / 30,074</td><td>各 5,000</td><td>0.04–0.2%</td><td>5 档全成交（0 秒 ~ 49 分）</td></tr>
+<tr><td>20:26</td><td>30,015.5 / 30,003 / 29,990.5 / 29,978 / 29,965.5 / 29,953</td><td>各 5,000</td><td><b>各 12.5 点 = 0.042%</b></td><td>6 档全成交（5.8 小时内）</td></tr>
+</tbody></table></div>
+<p>第二批是一个<strong>完全等距、完全等量的 6 档网格，总跨度只有 0.21%</strong>。这就是近端密网的标准形态。</p>
+<p><strong>2023-02-13（中等日，19 笔）</strong>——出现了两条金字塔，且都是<em>反向递增</em>：</p>
+<div class="tbl"><table>
+<thead><tr><th>时间</th><th class="l">形态</th><th class="l">结果</th></tr></thead>
+<tbody>
+<tr><td>12:31</td><td class="l">卖单 21,750.5(2.5万) → 21,767(4.5万) → 21,783.5(2.5万) → 21,821(2.5万) → 21,845(4.5万) → 21,872(8.5万) → 21,892.5(8.5万)，<b>越高挂越多</b></td><td class="l">7 档全部撤销（挂了 5.5 小时）</td></tr>
+<tr><td>18:31</td><td class="l">买单 21,604(2万) → 21,579(4万) → 21,541.5(8万) → 21,516.5(16万) → 21,491.5(16万)，<b>越低挂越多，逐档翻倍</b></td><td class="l">前 2 档成交，后 3 档撤销（8.9 小时）</td></tr>
+</tbody></table></div>
+
+<h3>收盘几乎总是回到平仓</h3>
+<div class="tbl"><table>
+<thead><tr><th class="l">指标（1–4 月 120 天）</th><th>数值</th></tr></thead>
+<tbody>
+<tr><td class="l">收盘完全空仓（仓位 = 0）</td><td><b>36 天（30%）</b></td></tr>
+<tr><td class="l">收盘 |袖口杠杆| &lt; 0.2</td><td>57 天（48%）</td></tr>
+<tr><td class="l">收盘 |袖口杠杆| &lt; 0.5</td><td>85 天（71%）</td></tr>
+<tr><td class="l">收盘 |袖口杠杆| &gt; 2</td><td>14 天（12%）</td></tr>
+<tr><td class="l">袖口杠杆中位 / 均值</td><td><b>0.00</b> / 0.49</td></tr>
+<tr><td class="l">总成交 ÷ 净仓位变动</td><td>3.1 倍（日内单日中位 1.4 倍）</td></tr>
+</tbody></table></div>
+<p>他在这个阶段<strong>基本是日内往返、收盘回平</strong>。所谓"底部段的仓位倾斜"其实是少数几天的杠杆尖峰（12% 的天数 &gt;2 倍）拉高了均值，中位数是 0。前文 §07 说的"轻多倾斜 +0.6 倍"是<em>月均值</em>，不是他每天真的持有 0.6 倍——<strong>正确的读法是：多数日子空仓，少数日子重仓</strong>。</p>
+
+
+
+<h3>日内那层到底是不是"做市网格"——不是</h3>
+<p>近端密网贴着市价 ±1% 铺 5 档，很容易被读成双边做市。把 2023-01→04 每 15 分钟切一片、统计当时盘口上活着的单，结论是反的：</p>
+<div class="tbl"><table>
+<thead><tr><th class="l">检验</th><th>结果</th><th class="l">含义</th></tr></thead>
+<tbody>
+<tr><td class="l">距市价 1.5% 内，买卖<b>同时</b>挂着的时间片</td><td><b>4 片 / 8,938（0%）</b></td><td class="l">几乎从不双边报价</td></tr>
+<tr><td class="l">距市价 1.5% 内的盘口状态</td><td>65% 空无一单 · 26% 只有买 · 10% 只有卖</td><td class="l">近端永远是<b>单边</b></td></tr>
+<tr><td class="l">日内买卖量对称度 min/max</td><td>中位 <b>0.19</b>；41% 的交易日 &lt;0.1（纯单向）；仅 26% &gt;0.7</td><td class="l">多数日子只朝一个方向做</td></tr>
+<tr><td class="l">买↔卖方向切换间隔</td><td>中位 <b>204 分钟</b>；39% 超过 6 小时</td><td class="l">以小时为单位换边，不是秒级来回</td></tr>
+</tbody></table></div>
+<p>所以"±1% 五档"的真实用途是 <strong>执行切片（slicing）</strong>：他决定要买（或要卖）之后，把一笔委托切成 5 档铺在 0.5% 的带子里，<strong>用限价单代替市价单</strong>，成交完就撤场——目的是拿到更好的均价、省下吃单滑点，<em>不是</em>同时挂两边赚买卖价差。前文把它称作"赚钱的引擎"容易误导，准确的说法是<strong>"省钱的引擎"</strong>：它降低的是建仓/平仓成本，方向盈亏仍来自他何时决定买卖。</p>
+<div class="tbl"><table>
+<thead><tr><th class="l">2023-01 ~ 04 收益归属</th><th>数值</th></tr></thead>
+<tbody>
+<tr><td class="l">币本位总变动</td><td>+1.65 BTC</td></tr>
+<tr><td class="l">日内配对往返（50 个双向成交日，964 万张配对）</td><td>+1.395 BTC（33 天为正 / 17 天为负）</td></tr>
+<tr><td class="l">同期手续费</td><td>−0.591 BTC</td></tr>
+</tbody></table></div>
+<p class="caveat" style="border-top:none;padding-top:0">⚠ 口径提醒：上表"日内配对往返"按当日买/卖 VWAP 配对 min(买量, 卖量)，<strong>包含日内方向性择时，不是纯价差</strong>——与"跨日方向漂移被误计为价差"的已知高估同源（严格的日内价差口径在 988 天窗口只有 +4.365 BTC）。可以确定的是它覆盖得住手续费，但不能读成"做市价差收入"。</p>
+
+<h3>"收盘平仓"的准确含义：仓位归零，但单还挂着</h3>
+<p>仓位 = 0 指的是<strong>合约净仓位为零</strong>——没有对冲空单、没有杠杆多单，手上只剩币本身（袖口里的 + 场外的）。但它<strong>不等于收工</strong>：</p>
+<div class="tbl"><table>
+<thead><tr><th class="l">状态（1–4 月 120 天）</th><th>天数</th><th class="l">说明</th></tr></thead>
+<tbody>
+<tr><td class="l">收盘仓位 = 0</td><td>36（30%）</td><td class="l">无对冲、无杠杆多</td></tr>
+<tr><td class="l">└ 其中仍挂着单</td><td><b>21（占空仓日 58%）</b></td><td class="l">中位 <b>42 万张 ≈ 17 BTC ≈ 总币的 25%</b> 悬在盘口两侧</td></tr>
+<tr><td class="l">└ 完全干净（无仓位且无挂单）</td><td>15</td><td class="l">全窗口只有 <b>12%</b> 的日子是真正的空手</td></tr>
+<tr><td class="l">全天无任何挂单（不论仓位）</td><td>24（20%）</td><td class="l"></td></tr>
+</tbody></table></div>
+<p>挂着的那些单会暴露他的意图，即使仓位是零：2023-02-20 / 22 / 26 三天都是<strong>仓位 0 + 15 张卖单 + 1–3 张买单</strong>（上方埋伏，等反弹）；3-10 / 3-11 恐慌之后两天是<strong>仓位 0 + 9 张买单 + 0 张卖单</strong>（下方等着接回来）。所以他的"平仓"是<strong>压紧的弹簧</strong>，不是离场——真正的仓位藏在挂单里。</p>
+
+<h3>单档到底多大：袖口的 ~20%（口径更正）</h3>
+<div class="callout"><p><strong>口径更正：</strong>此前本节以"占总币"为主口径。这是错的——提走的场外币根本不在执行系统里，对挂单规模没有约束意义。<strong>唯一有意义的分母是袖口（交易所内币数）</strong>，以下全部按袖口口径重述。</p></div>
+<div class="tbl"><table>
+<thead><tr><th class="l">口径（÷ 袖口市值）</th><th>近端密网</th><th>远端金字塔</th><th>全部限价单</th></tr></thead>
+<tbody>
+<tr><td class="l">单档张数中位</td><td>20,000</td><td>20,000</td><td>20,000</td></tr>
+<tr><td class="l">单档 ÷ 袖口 中位</td><td><b>22%</b></td><td><b>19%</b></td><td>22%</td></tr>
+<tr><td class="l">单档 ÷ 袖口 p75 / p90</td><td>45% / 72%</td><td>42% / 93%</td><td>45% / —</td></tr>
+<tr><td class="l">整批（≥3 档）÷ 袖口 中位</td><td><b>105%</b></td><td><b>159%</b></td><td>114%</td></tr>
+</tbody></table></div>
+<p>基准：当时袖口 <strong>4.4 BTC</strong>、价格约 24,162。一档 2 万张 ≈ 0.83 BTC 名义 ≈ 袖口的 1/5；铺一批 5 档 ≈ 一倍袖口的名义。<strong>近端与远端的单档大小几乎一样（22% vs 19%）</strong>——两种结构的区别只在<em>档距</em>和<em>档数</em>：远端的金字塔靠越远越多档堆出来，不靠加大单档。</p>
+<p>对复刻的含义：<strong>单位挂单 = 袖口的 ~20%，一个批次的总名义 ≈ 1–1.6 倍袖口</strong>。注意他敢这么挂的前提是袖口只占身家的 6%——如果你的袖口占比高，请按风险自行降档；这两个数字描述的是他，不是普适安全值。</p>
+<h3>时段</h3>
+<p>下单集中在 <strong>UTC 16:00–24:00（470 笔，41%）</strong>，峰值 19:00–21:00 UTC（北京时间凌晨 3–5 点，美股午后）；其次 UTC 02:00（北京上午 10 点）。UTC 00–08 有 249 笔、08–16 有 267 笔。这对复刻的含义：<strong>他的成交集中在美国时段的流动性里</strong>，程序化执行要覆盖这个时窗，人肉盯盘是做不到的。</p>
+
+
+<h2><span class="num">12 · 三年三种杠杆 &amp; 2023 双百日对照</span>2023 会赌、2024 常驻对冲、2025 纯对冲；同一年里两个百日周期，钱的来源完全不同</h2>
+<div class="callout blue"><p><strong>先回答一个中枢问题（经复核，成立）。</strong>ETH 2024–2025 密度最高的区其实是 <b>2,400–2,800</b>（25% 的时间挤在 400U 里 = 6.26%/100U，高于 3.0–3.6K 的 4.93%），现价正在其中。它没有出现在卖梯配重里，不是因为它不重要，而是因为<strong>卖梯只铺"上方的中枢"</strong>：脚下的中枢是持仓成本区和换手场，上方的中枢才是被套盘的供给区。它的真实角色有两个——① 上沿 2,777–2,800 是第一道供给架，减仓梯的低段（2,533–2,777）就压在这里；② 若价格将来从上方跌回 2,800，这个区翻转成买回区。</p></div>
+
+<h3>三年杠杆分层（袖口口径）</h3>
+<div class="tbl"><table>
+<thead><tr><th class="l">年份</th><th>袖口均值</th><th>杠杆中位</th><th>多/空/平 日占比</th><th>|杠杆|&gt;1 / &gt;2</th><th>极值</th><th>月换手</th><th>maker</th><th>手续费 (BTC)</th><th>资金费 (BTC)</th><th>币收益 (BTC)</th></tr></thead>
+<tbody>
+<tr><td class="l"><b>2023 双向爆发型</b></td><td>6.7</td><td>0.00</td><td>38% / 38% / 24%</td><td>22% / 8%</td><td>+10.4 / −4.6</td><td><b>28×</b></td><td>35%</td><td>1.19</td><td>付 0.13</td><td>+10.63</td></tr>
+<tr><td class="l"><b>2024 常驻对冲中杠杆</b></td><td>14.7</td><td><b>−1.09</b></td><td>5% / <b>90%</b> / 4%</td><td>59% / 11%</td><td>+2.3 / −3.7</td><td>12.8×</td><td>32%</td><td>1.06</td><td>收 1.59</td><td>+3.10</td></tr>
+<tr><td class="l"><b>2025 低杠杆纯对冲</b></td><td>23.0</td><td>−0.74</td><td>1% / <b>97%</b> / 1%</td><td>15% / <b>0%</b></td><td>+0.2 / −2.3</td><td><b>3.3×</b></td><td>49%→年末 80–100%</td><td>0.35</td><td>收 1.02</td><td>+10.43</td></tr>
+</tbody></table></div>
+<p>演化一目了然：<strong>杠杆极值逐年腰斩（10.4 → 2.3 → 0.2），换手降一个数量级（28× → 3.3×），方向从双向对赌变成 97% 时间的净空对冲</strong>；2025 年赚得和 2023 年一样多（+10.4 BTC），但手续费只有三分之一、全年没有一天超过 2 倍杠杆。钱包越大，动作越少。2024 / 2025 的细拆另文展开，本节按当前需要聚焦 2023。</p>
+
+
+<h3>0.5× 档多单的止盈距离：中位 +1%，7 小时内了结</h3>
+<p>取 2023-01→04 峰值杠杆 0.2–0.8×（≈0.5× 档）的多头，两种口径交叉验证：严格回合口径（仓位 0→正→0，n=6）首次减仓中位 <b>+0.45%</b>、清仓中位 +0.64%、盈利回合清仓中位 <b>+1.70%</b>、持仓中位 7 小时；全量减多成交口径（270 笔、163 万张，按张数加权、对照当时持仓均价）：</p>
+<div class="tbl"><table>
+<thead><tr><th class="l">杠杆档（减仓时点）</th><th>笔数 / 万张</th><th>减多距离 p25 / 中位 / p75 / p90</th><th>盈利侧张数占比</th></tr></thead>
+<tbody>
+<tr><td class="l">&lt;0.2×</td><td>94 / 38</td><td>+0.17 / +0.60 / +1.80 / <b>+5.22%</b></td><td>82%</td></tr>
+<tr><td class="l"><b>0.2–0.8×</b></td><td>270 / 163</td><td>−0.43 / +0.57 / +1.42 / +2.23%</td><td>68%</td></tr>
+<tr><td class="l">0.8–2×</td><td>284 / 186</td><td>−0.68 / +0.54 / +1.06 / +1.65%</td><td>59%</td></tr>
+<tr><td class="l">&gt;2×</td><td>677 / 656</td><td>−0.97 / <b>0.00</b> / +0.62 / +1.15%</td><td>51%</td></tr>
+</tbody></table></div>
+<p>0.2–0.8× 档细看：<b>止盈（盈利侧）张数加权中位 +1.08%，p25 +0.49%、p75 +1.56%，只有 10% 的量拿到 +4.8% 以上</b>；止损侧中位 −1.44%、p10 −2.74%，且亏损侧 <b>100% 吃单</b>（恐慌市价砍）而盈利侧 66% 吃单。另有一个跨档规律：<b>仓位越重、离场越急</b>——&lt;0.2× 的轻仓拿到中位 +0.60/p90 +5.2%，&gt;2× 的重仓中位 0.00%（打平就跑）。他的 0.5× 多单不是波段，是"7 小时、赚 1 个点就走"的日内单；能拿远的只有轻仓。</p>
+
+
+<h3>切片之外：1–4 月有没有跨度更大的 0.5× 波段单——有，8 段，但都很小</h3>
+<p>剔除日内切片，按"日终杠杆连续 ≥2 天处于 0.15–0.9×"切段，1 月至 5 月初共 <b>8 段</b>：</p>
+<div class="tbl"><table>
+<thead><tr><th class="l">段</th><th>天数</th><th>杠杆均值</th><th>价格跨度</th><th>币损益</th><th class="l">结局</th></tr></thead>
+<tbody>
+<tr><td class="l">01-24 → 26</td><td>3</td><td>0.22</td><td>−0.3%</td><td>−0.16</td><td class="l">段后次日直接升级成 <b>10.42×</b></td></tr>
+<tr><td class="l">02-02 → 07</td><td>6</td><td>0.55</td><td>−0.8%</td><td>+0.17</td><td class="l">平掉，两天后升级 6.4×</td></tr>
+<tr><td class="l"><b>02-16 → 17</b></td><td>2</td><td>0.69</td><td><b>+9.7%</b></td><td>+0.27</td><td class="l">唯一吃到大阳线的一段：0.55→0.83× 扛过 +9.7% 日，VWAP 捕获 +2.4%，随即清仓</td></tr>
+<tr><td class="l">02-24 → 25</td><td>2</td><td>0.74</td><td>−1.0%</td><td>−0.75</td><td class="l">亏损平仓</td></tr>
+<tr><td class="l"><b>02-27 → 03-08</b></td><td><b>10</b></td><td>0.43</td><td>−3.3%</td><td>+0.18</td><td class="l">全窗口最长波段，横盘里几乎白拿；段后次日 = <b>03-09 USDC 夜 6.64×</b></td></tr>
+<tr><td class="l">03-24 → 25</td><td>2</td><td>0.33</td><td>+3.8%</td><td>+0.20</td><td class="l">VWAP 捕获 +3.3%，正常了结</td></tr>
+<tr><td class="l"><b>04-10 → 11</b></td><td>2</td><td>0.32</td><td>+1.4%</td><td>−0.08</td><td class="l">段后翻小空（−0.1→−0.32×），衔接 04-12→14 顶部 30,666 卖出——唯一与结构事件衔接的波段</td></tr>
+<tr><td class="l">05-03 → 05</td><td>3</td><td>0.49</td><td>+3.5%</td><td>−0.19</td><td class="l">追高失败</td></tr>
+</tbody></table></div>
+<ul class="plain">
+<li><b>存在但规模很小</b>：8 段合计净损益 ≈ −0.36 BTC（不计段后升级日）；最长 10 天、多数 2–3 天；价格跨度 −1% ~ +4%，没有一段是"0.5× 拿住 +20%"式的波段。H1 +65% 的行情从未被一笔持有的 0.5× 吃到——与"H1 杠杆净贡献 ≈ 0"互证。</li>
+<li><b>波段是升级的跳板（关键行为模式）</b>：8 段中有 3 段在结束后 1–2 天内直接升级为 6–10× 尖峰（01-26→10.42×、02-07→6.4×、03-08→03-09 的 6.64×）。他的灾难不是从重仓开始的，是<b>从"拿了几天小仓、越拿越自信"开始的</b>。对复刻的警告：持有多日的 0.4× 倾斜本身安全，危险的是它诱发的加仓冲动——R1 的硬顶就是为这一步设的。</li>
+<li><b>两段值得抄</b>：02-16→17（事前建 0.5–0.8×，扛过大阳线立刻清仓，不恋战）；04-10→11（小多头顺势拿到顶部区，翻小空衔接结构性减仓）。共同点：<b>方向与结构一致、仓位不升级、事件兑现即离场</b>。</li>
+</ul>
+
+<h3>2023：同一年里的两个百日周期，涨幅一样，打法相反</h3>
+<p>两个窗口都从金叉起算 100 天，价格都恰好 <strong>+65%</strong>——天然的对照实验：</p>
+<div class="tbl"><table>
+<thead><tr><th class="l">指标</th><th>H1：金叉 2023-01-12 → 04-21<br>(17,442 → 28,784)</th><th>H2：金叉 2023-10-03 → 2024-01-11<br>(27,980 → 46,106)</th></tr></thead>
+<tbody>
+<tr><td class="l">袖口均值</td><td>4.4 BTC</td><td>12.1 BTC</td></tr>
+<tr><td class="l">杠杆中位 [p10, p90]</td><td><b>+0.09</b> [−0.30, +0.94]</td><td><b>−0.34</b> [−1.09, +2.01]</td></tr>
+<tr><td class="l">多 / 空 / EOD平 日占比</td><td>51% / 18% / <b>31%</b></td><td>38% / <b>54%</b> / 8%</td></tr>
+<tr><td class="l">重仓日（|杠杆|&gt;1）</td><td><b>10 天</b>（尖峰式）</td><td><b>47 天</b>（持续持有）</td></tr>
+<tr><td class="l">最大杠杆时点</td><td>金叉后第 15 天（01-27，10.4×）</td><td>金叉后第 14 天（10-17，4.4×）</td></tr>
+<tr><td class="l">重仓损益：顺势 / 逆势</td><td>−1.72 / +1.92 → <b>合计 ≈ 0</b></td><td><b>+8.64</b> / −2.65</td></tr>
+<tr><td class="l">轻仓+切片损益</td><td><b>+2.35（全部利润来源）</b></td><td>+0.81</td></tr>
+<tr><td class="l">月换手 / maker</td><td><b>70.8×</b> / 42%</td><td>15.5× / 35%</td></tr>
+<tr><td class="l">手续费（占袖口）</td><td>0.49 BTC（<b>11%</b>）</td><td>0.35 BTC（3%）</td></tr>
+<tr><td class="l">币收益（占袖口）</td><td>+2.19（+49%）</td><td><b>+6.86（+56%）</b></td></tr>
+</tbody></table></div>
+<ul class="plain">
+<li><strong>H1 的杠杆是零和赌博。</strong>10 个重仓日净贡献 ≈ 0（里面是 01-27 的 10.4× 侥幸、03-09 的 6.6× 灾难与 03-14 的追单反赚互相抵消）；全部利润来自轻仓状态下的切片执行（+2.35）。71 倍月换手、烧掉袖口 11% 的手续费，换来的方向性净收益是零——<b>H1 真正能复制的只有"轻仓 + 好执行"，不是任何一次重仓</b>。</li>
+<li><strong>H2 的杠杆是顺周期、拿得住的。</strong>重仓日 10 → 47 天，EOD 平仓率 31% → 8%——从"每天回平的日内客"变成"持仓过夜的周期客"。顺势重仓 +8.64；唯一的逆势重仓损失（−2.65）就是突破前夜在箱体顶下方扛的 −2.46× 空头。换手降到 1/5，手续费占比 11% → 3%。</li>
+<li><strong>两个周期的最大杠杆都出现在金叉后第 14–15 天。</strong>H1 是逆结构的赌（横盘里 10.4× 抄底），H2 是顺结构的赌（突破确认日 4.4× 翻多）。时点不是区别，<b>与结构对齐才是</b>。</li>
+<li><strong>对当下 ETH 的含义：金叉后 day 43，处在 H1 的镜像里。</strong>H1 说明这个阶段重仓不加分（中位杠杆 +0.09，利润全靠轻仓执行）；H2 式的 47 天顺势重仓属于 10 月到期窗之后的下一个金叉。当前 0.4× 多单已在 H1 的 p90（0.94）以内，不加。</li>
+</ul>
+
+
+<h2><span class="num">13 · URPD vs 时间密度</span>链上筹码说墙在 2.7–3.0K，时间密度说中枢在 2.4–2.8K——为什么，信谁</h2>
+<p>Glassnode 的 ETH URPD（2026-08-25）显示最大筹码簇在 <b>2,723–3,020：三根大柱合计 ≈ 1,300 万 ETH</b>（峰值桶 2,723–2,822 一根就 521 万 = 6.75%），而 §12 的时间密度说 2.4–2.8K 才是最密中枢、2.8–3.0K 是谷。先做排除法——把时间密度改口径重算：</p>
+<div class="tbl"><table>
+<thead><tr><th class="l">口径</th><th>2.4–2.8K (/100U)</th><th>2.7–3.0K (/100U)</th><th>3.0–3.6K (/100U)</th><th>峰值桶</th></tr></thead>
+<tbody>
+<tr><td class="l">① 时间加权 2024–2025（fig3 现状）</td><td><b>6.26%</b></td><td>3.39%</td><td>4.93%</td><td>2,500–2,600</td></tr>
+<tr><td class="l">② 成交量加权 2024–2025</td><td>6.01%</td><td>3.32%</td><td>4.53%</td><td>2,500–2,600</td></tr>
+<tr><td class="l">③ 时间加权 + 2026</td><td>4.87%</td><td>2.89%</td><td>4.09%</td><td>2,500–2,600</td></tr>
+<tr><td class="l">④ 成交量加权 + 2026（最接近 URPD 的"换手在哪"）</td><td><b>4.85%</b></td><td><b>2.85%</b></td><td>3.77%</td><td>2,500–2,600</td></tr>
+</tbody></table></div>
+<p><strong>四种口径都不收敛到 URPD</strong>——分歧不是窗口或加权造成的。真正的原因有三层：</p>
+<ul class="plain">
+<li><strong>幸存者加权（最主要）。</strong>URPD 只统计"最后一次链上移动后再没动过"的币。现价区（2.4–2.6K）的币在持续换手，戳记不断被刷新、无法堆积；而 2.7–3.0K 的币是 2025-Q4→2026-01 下跌途中最后一次移动的（该区成交量的 36% 发生在 2025-11 之后），持有人现在浮亏 10–17%——<b>套牢的币不动，URPD 就在头顶结冰</b>。跌破后的上方带天然会长成最大筹码簇，这是处置效应的直接影像，不需要那里"发生过更多交易"。</li>
+<li><strong>链上 ≠ 交易所。</strong>URPD 按链上移动戳记：ETF 申赎、托管归集、质押进出、OTC 都会整块重戳。单个 ~99U 桶塞下 521 万 ETH（≈140 亿美元）远超有机换手的形状，<b>峰值桶大概率含托管/ETF 级别的整块搬运</b>，应打折看；但 2,72–3,02 连续三根大柱构成的"带"是稳健的。</li>
+<li><strong>测量对象不同。</strong>时间密度测的是<b>价格路径结构</b>（哪里横过、哪里是架子）；URPD 测的是<b>当前持有人的成本结构</b>（哪里有解套盘）。跌破一个区之后，两者本来就该分道扬镳。</li>
+</ul>
+<h3>信谁：按问题分</h3>
+<div class="tbl"><table>
+<thead><tr><th class="l">问题</th><th class="l">更可信的口径</th><th class="l">理由</th></tr></thead>
+<tbody>
+<tr><td class="l">反弹到哪里会遇到成片卖盘（<b>配重</b>）</td><td class="l"><b>URPD</b></td><td class="l">解套即卖是一阶行为因果；1,300 万 ETH 的保本线就压在 2,72–3,02</td></tr>
+<tr><td class="l">具体挂单价位钉在哪（<b>几何</b>）</td><td class="l"><b>时间密度 + 结构/锚点</b></td><td class="l">URPD 桶宽 ~99U 且是实体模型推算（ETH 非 UTXO 链，Point-in-Time 关闭时还会回溯重聚类），做不了精确价位</td></tr>
+<tr><td class="l">下方哪里有承接</td><td class="l">两者一致</td><td class="l">URPD 在 2.0–2.3K 有 160–260 万级柱子，与接针梯 2,222 / 2,099 / 1,999 重合</td></tr>
+<tr><td class="l">3.6K 之上是不是真空</td><td class="l">两者一致</td><td class="l">URPD 3.4K 以上每桶只剩 20–70 万，时间密度也是尖顶——一旦穿过 3.4–3.6K，头顶成本盘稀薄</td></tr>
+</tbody></table></div>
+
+<h3>扣掉 BitMine 之后，2,7–3,0K 的真实套牢盘还剩多少</h3>
+<p>前提信息：该带的大量筹码来自 BitMine（BMNR），且其 ETH 基本已质押、默认不卖。用 BMNR 公开披露的持仓时间线核验（12 个精确披露点，2025-11-16 的 3,559,879 → 2026-08-23 的 5,847,611）：</p>
+<div class="tbl"><table>
+<thead><tr><th class="l">BMNR 批次</th><th>增持 ETH</th><th>期间价格（均值）</th><th class="l">对 2,7–3,0K 带的贡献</th></tr></thead>
+<tbody>
+<tr><td class="l">2025-07 → 11-16 主建仓</td><td>3,559,879</td><td>2,405–4,832（<b>3,915</b>）</td><td class="l">按买入价应戳在 3.4K+ ——但 URPD 在 3.4–4.9K 每桶只剩 20–70 万，<b>350 万戳记不见了 → 被后续归集/质押重戳过</b></td></tr>
+<tr><td class="l">11-16 → 12-21</td><td>+506,183</td><td>2,766–3,324（~3,000）</td><td class="l">直接戳入带内 ~50 万</td></tr>
+<tr><td class="l">12-21 → 02-22</td><td>+356,597</td><td>1,827–3,355（2,699）</td><td class="l">部分在带内（1 月上旬）</td></tr>
+<tr><td class="l">02-22 → 08-23</td><td>+1,424,952</td><td>1,568–2,516（~2,0xx）</td><td class="l">戳在带下方</td></tr>
+</tbody></table></div>
+<p>关键旁证：ETH 收盘落在 2,700–3,020 的近期日子集中在 <b>2025-11（9 天）/ 2025-12（19 天）/ 2026-01（11 天）</b>——正是 BMNR 密集增持+质押的窗口。若其托管归集发生在此期间，整个 4–4.5M 的栈会重戳在 2.75–3.0K，<b>量级恰好对上那根 521 万的异常单桶</b>（2,723–2,822）。"消失的 3.4K+ 戳记"与"异常的 2.7K 巨桶"互为镜像，是同一件事的两面。</p>
+<div class="tbl"><table>
+<thead><tr><th class="l">2,723–3,020 带的构成估算</th><th>ETH</th></tr></thead>
+<tbody>
+<tr><td class="l">URPD 名义合计（三根大柱）</td><td>≈ 13.0M</td></tr>
+<tr><td class="l">− BMNR（质押冻结，默认不卖）</td><td>−4 ~ −5M</td></tr>
+<tr><td class="l">− ETF 托管 / 其它 DAT / 质押池归集（只随申赎动，不挂保本卖单）</td><td>−1 ~ −2M</td></tr>
+<tr><td class="l"><b>= 会在保本位真实出货的套牢盘</b></td><td><b>≈ 6–8M</b></td></tr>
+</tbody></table></div>
+<p><strong>卖压评估：中等偏轻，但仍是全图最大的一堵墙。</strong>6–8M 的真实套牢盘仍大于下方任何架子（2.0–2.15K 合计才 ~4.5M）；按解套盘历史上分批出手 15–25% 估算，首次回到带内要消化 0.9–2.0M ETH ≈ 全球现货一到两周的吸收量——<b>首次进带会明显放缓、大概率需要多次尝试，但不是"周期顶"级别的墙</b>。且 BMNR 仍在带下方持续小额买入（近三周日均 2–5K ETH），把带内供给进一步冻结。</p>
+<p class="caveat" style="border-top:none;padding-top:0">⚠ 三个诚实前提：① "BMNR = 那根 521 万巨桶"是量级+时点吻合的推断，非链上实体核验，宜用 entity-adjusted URPD 复查；② 2,921–3,020 那根 3.48M 桶里 BMNR 成分较少，散户/基金套牢浓度更高——带的<b>上沿比下沿硬</b>；③ "质押 = 不卖"依赖 BMNR 不被迫卖币——若其 mNAV 持续 &lt;1 引发回购/赎回压力，冻结假设失效。BMNR 的 mNAV（股票市值 ÷ 持币市值）正是这个预警器：<b>把"BMNR mNAV 跌破 1 且持续一周"列为墙变硬的触发信号</b>，随每周例行刷新检查。</p>
+
+
+<h3>2,500–3,000 内的阻力分层：最硬的一段是 2,900–3,000</h3>
+<p>四个独立维度对齐（真实套牢 = URPD 扣 BMNR；近期换手 = 2025-11 以来的成交分布；结构位；图形记忆），按 100U 条带打分：</p>
+<div class="tbl"><table>
+<thead><tr><th class="l">条带</th><th>近期换手<br>(vol% / 4h根数)</th><th>URPD 名义 → 真实</th><th class="l">结构位</th><th class="l">强度判定</th></tr></thead>
+<tbody>
+<tr><td class="l">2,533–2,560</td><td>—</td><td>薄</td><td class="l">60 日箱体顶 2,547，近期 4 次上影测试</td><td class="l"><b>第一道门</b>：技术性阻力，供给薄，放量破后无后续</td></tr>
+<tr><td class="l">2,560–2,700</td><td><b>3.8% / 7 根</b></td><td>~0.5–0.8M/桶</td><td class="l">无</td><td class="l"><b>空气口袋</b>：破 2,547 后会走得很快</td></tr>
+<tr><td class="l">2,700–2,800</td><td>10.9% / 22</td><td>5.21M → <b>~1–1.5M</b></td><td class="l">12 月低点 2,719 / 1 月平台下沿 2,786</td><td class="l">名义最吓人、实际中等（BMNR 冻结主体在此桶）</td></tr>
+<tr><td class="l">2,800–2,900</td><td>13.9% / 34</td><td>4.35M → ~3M</td><td class="l"><b>fib 0.382 = 2,823</b></td><td class="l">次硬</td></tr>
+<tr><td class="l"><b>2,900–3,000</b></td><td><b>34.5% / 141</b></td><td>3.48M → <b>~3M+（真人最浓）</b></td><td class="l">2025-12 价值区（月收 2,992）+ 2026-01 破位平台核心 + 心理关口 3,000 + 上方 3,020 桶 2.27M 压顶</td><td class="l"><b>全带最硬</b></td></tr>
+</tbody></table></div>
+<p>读法：<b>2,900–3,000 是四个维度全部叠加的地方</b>——近十个月 1/3 的成交在这里换手（141 根 4h K 线，是 2,7–2,8 的六倍时间），1 月破位前的最后平台（01-15→28 低点 2,786）就架在这上面，URPD 在此段的 BMNR 成分又最少。它恰好也是 §08 到期窗映射的迷你顶（2,92x）——第五个独立口径汇合。相反，名义上最大的 2,7–2,8 桶（521 万）因 BMNR 冻结实际偏软，而 <b>2,56–2,70 是真空</b>：一旦放量站上 2,547，下一站大概率直接是 2,7 字头。梯子权重按此定型：2,547 上方第一档轻（过门确认），2,666 一档利用真空段的快速通过，<b>2,777 / 2,888 中等，2,999 最重</b>。</p>
+
+
+<h3>补上魏神的中枢时长口径：三层时间模型（一处修正、一处强化）</h3>
+<p>上表的"近期换手"用的是 2025-11 以来的新窗口，<strong>不是魏神给卖梯配重的正统口径</strong>——他用的是<b>上一轮完整周期的时间密度</b>（2021 年每价位停留时长 → 配 2023 年的梯子）。把两个窗口并排（每 100U 占各自窗口 4h 根数的百分比）：</p>
+<div class="tbl"><table>
+<thead><tr><th class="l">条带</th><th>上轮周期 2024–25<br>（魏神口径）</th><th>本轮 2025-11 起<br>（新窗口）</th><th>URPD 真实筹码</th><th class="l">三层合读</th></tr></thead>
+<tbody>
+<tr><td class="l">2,400–2,500</td><td>6.75%</td><td>7.1%</td><td>~1.7M</td><td class="l">当前箱体，成本区</td></tr>
+<tr><td class="l">2,500–2,600</td><td><b>7.80%（全图最密单桶）</b></td><td>2.3%</td><td>~2.1M</td><td class="l"><b>旧中枢下沿 = 现箱体顶所在</b>：磨的区</td></tr>
+<tr><td class="l">2,600–2,700</td><td><b>7.30%</b></td><td>1.5%</td><td>仅 ~0.5–0.8M</td><td class="l"><b>记忆厚、筹码空</b>：慢，但没有成片抛压</td></tr>
+<tr><td class="l">2,700–2,800</td><td>3.19%</td><td>10.9%</td><td>5.21M→1–1.5M 真实</td><td class="l">旧谷 + 新伤（BMNR 冻结主体）</td></tr>
+<tr><td class="l">2,800–2,900</td><td><b>1.66%（旧谷底）</b></td><td>13.9%</td><td>4.35M→~3M</td><td class="l">纯"新套牢"墙 + fib 2,823：尖锐拒绝型</td></tr>
+<tr><td class="l"><b>2,900–3,000</b></td><td><b>5.31%（旧中枢）</b></td><td><b>34.5%</b></td><td><b>3.48M→~3M+ 真人最浓</b></td><td class="l"><b>旧中枢 + 新中枢 + 真人墙三层全叠：全带最硬（强化）</b></td></tr>
+</tbody></table></div>
+<ul class="plain">
+<li><strong>修正：2,56–2,70 不是空气口袋。</strong>新窗口只有 7 根 K 线让它看起来是真空，但在魏神口径下它是上轮最厚的中枢之一（7.3–7.8%/100U）。只是它的持有人已在 2026 年崩盘中离场（URPD 每桶仅 0.5–0.8M）——所以预期形态是<b>"磨而不拒"</b>：旧价位记忆带来粘性和双向换手，但没有成片解套抛压把价格打回去。通过这段需要时间，不是一根阳线的事——这反而与到期窗的时间投影自洽（10 月中旬才摸 2,9x）。</li>
+<li><strong>强化：2,900–3,000 三层全部叠加。</strong>它同时是上轮中枢（5.31%）、本轮新中枢（141 根、34.5% 换手）和真人套牢最浓的 URPD 段——比只看两个维度时更硬。而 2,800–2,900 是上轮谷底（1.66%）+ 纯新伤：那里的阻力是尖锐的一次性拒绝型（fib 2,823 为轴），不是磨。</li>
+<li><strong>模型已经应验了一次：</strong>本轮从 1,504 的反弹，恰好停在上轮全图最密单桶 2,500–2,600 的下沿（箱体顶 2,547）——魏神的中枢时长模型事前就该预测到反弹会先卡在这里。三层用法定型：<b>上轮时长 = 几何与锚点，新窗时长 = 现役战场，URPD = 持有人重量</b>；三层都厚的地方才是真墙。</li>
+</ul>
+
+
+<h3>多周期叠加（2021 → 2026）：魏神规则的完整实现</h3>
+<p>魏神原话的完整版是：<em>历史上形成中枢的停留时间和次数越多的区域，越可能形成阻力——要多周期叠加判断</em>。上一小节只用了 2024–25，这里补齐 2021 年以来的全部六个纪元。每 100U 条带统计三个量：各年 4h 停留根数、<b>驻留次数</b>（日收盘连续 ≥3 天在带内算一次独立中枢驻留）、<b>跨纪元数</b>（该年停留 ≥30 根才算"到过"）：</p>
+<div class="tbl"><table>
+<thead><tr><th class="l">条带</th><th>2021</th><th>2022</th><th>2023</th><th>2024</th><th>2025</th><th>2026</th><th>合计根数</th><th>驻留次数</th><th>跨纪元</th><th class="l">判定</th></tr></thead>
+<tbody>
+<tr><td class="l"><b>2,500–2,600</b></td><td>52</td><td>69</td><td>0</td><td>172</td><td>170</td><td>3</td><td><b>466</b></td><td><b>9</b></td><td>4</td><td class="l"><b>六年驻留冠军</b>——现箱体顶正卡其下沿</td></tr>
+<tr><td class="l">2,600–2,700</td><td>49</td><td>76</td><td>0</td><td>192</td><td>128</td><td>3</td><td>448</td><td>6</td><td>4</td><td class="l">厚，但持有人已离场：磨</td></tr>
+<tr><td class="l">2,700–2,800</td><td>53</td><td>63</td><td>0</td><td>48</td><td>92</td><td>7</td><td>263</td><td><b>2</b></td><td>4</td><td class="l">走廊偏弱</td></tr>
+<tr><td class="l">2,800–2,900</td><td>33</td><td>77</td><td>0</td><td>32</td><td>41</td><td>7</td><td><b>190</b></td><td><b>0</b></td><td>4</td><td class="l"><b>六年从未形成过中枢的永久走廊</b></td></tr>
+<tr><td class="l"><b>2,900–3,000</b></td><td>38</td><td>90</td><td>0</td><td>112</td><td>121</td><td>42</td><td>403</td><td>7</td><td><b>5（唯一）</b></td><td class="l"><b>唯一五个纪元都驻留过的带</b></td></tr>
+<tr><td class="l">3,000–3,100</td><td>44</td><td>97</td><td>0</td><td>124</td><td>93</td><td>31</td><td>389</td><td>3</td><td>5</td><td class="l">墙的背面</td></tr>
+</tbody></table></div>
+<ul class="plain">
+<li><strong>意外发现：2,800–2,900 六年来一次中枢都没形成过</strong>（驻留次数 = 0，历史根数也最少）。它是一条永久性的过渡走廊——价格历来单程穿越、从不停留。所以那里今天的阻力是<b>纯 2026 年新伤</b>（URPD 戳记 + fib 2,823），预期形态是一次尖锐拒绝或一根长针，而不是持久战。BMNR 冻结桶也在这附近，进一步坐实"无有机供给"。</li>
+<li><strong>2,900–3,000 是唯一在五个纪元（2021/22/24/25/26）都驻留过的带</strong>：2021-08/09、2022-02→04、2024-03、2025-02+12、2026-01——七次独立驻留。叠加本轮 34.5% 的换手和真人 URPD 墙，<b>它在魏神完整规则下依旧是、而且更加是全带最硬</b>。</li>
+<li><strong>2,500–2,700 是六年驻留时长冠军区</strong>（466+448 根、9+6 次驻留）：五个纪元里四个在这里筑过营。当前箱体顶 2,547 卡在它下沿绝非偶然——这是模型的第二次应验。持有人虽已离场（URPD 空），但按"次数"维度它的价位记忆最深：磨的预期不变，且磨的时间可能比只看新窗口更久。</li>
+</ul>
+<p>最终的通行剧本：<b>破 2,547 门 → 在 2,55–2,70 的六年老中枢里磨 → 快速穿越 2,70–2,90 永久走廊（其中 2,82x 附近可能有一次 fib+新伤的尖锐拒绝）→ 撞上 2,90–3,02 的三层真墙</b>。梯子权重最后一次定型：2,555 轻、2,666 轻、2,777 轻中、<b>2,888 中（走廊里的一次性拒绝位）、2,999 最重</b>。</p>
+
+
+<h3>范围扩到 2,500–3,300：复合最强阻力带 = 2,900–3,120（核心 2,900–3,000）</h3>
+<div class="tbl"><table>
+<thead><tr><th class="l">条带</th><th>多周期分<br>(根数/次数/纪元)</th><th>近期换手<br>(vol%/根)</th><th>URPD 名义→真实</th><th class="l">结构位</th><th class="l">类型</th></tr></thead>
+<tbody>
+<tr><td class="l">2,500–2,700</td><td><b>2.69/2.35</b>（六年冠军区）</td><td>2.5% / 7</td><td>~2.6M（浅套）</td><td class="l">箱体顶 2,547</td><td class="l">磨（记忆厚、抛压薄）</td></tr>
+<tr><td class="l">2,700–2,900</td><td>1.56/<b>1.20</b>（永久走廊）</td><td>16.2% / 56</td><td>9.6M→4–4.5M</td><td class="l">fib 0.382=2,823</td><td class="l">尖锐一次性拒绝</td></tr>
+<tr><td class="l"><b>2,900–3,000</b></td><td><b>2.56</b>（7 次/5 纪元）</td><td><b>22.6% / 141</b></td><td><b>3.48M→3M+</b></td><td class="l">12 月价值区 + 关口 3,000</td><td class="l"><b>核心墙</b></td></tr>
+<tr><td class="l"><b>3,000–3,100</b></td><td>2.13（5 纪元）</td><td><b>19.5% / 105</b></td><td><b>2.27M（较真实）</b></td><td class="l">关口上沿</td><td class="l"><b>墙的延伸</b></td></tr>
+<tr><td class="l">3,100–3,200</td><td>2.41（5 次/5 纪元）</td><td>17.1% / 96</td><td>仅 ~0.6M</td><td class="l">1 月平台</td><td class="l">磨（记忆厚、筹码薄）</td></tr>
+<tr><td class="l">3,200–3,300</td><td>2.12</td><td>11.5% / 46</td><td>~0.55M</td><td class="l"><b>fib 0.5 = 3,231</b></td><td class="l">结构检查站</td></tr>
+</tbody></table></div>
+<p>结论：<b>2,900–3,120 合成一堵复合墙</b>——真人套牢 5M+ ETH、近期 42% 的换手、唯二的五纪元带（2,9–3,0 与 3,0–3,1），心理关口 3,000 恰在正中；其中最硬的 100U 仍是 2,900–3,000。扩到 3,300 不改变判定：3,1–3,2 是"记忆厚、筹码薄"的磨区，3,231 只是 fib 0.5 检查站。<b>触发修订：墙翻支撑的确认线从"站上 3,02"上调为"放量站上 3,12"</b>（URPD 2.27M 桶的上缘 3,119 才是墙的真实上沿）；站稳 3,12 之后，下一段是磨到 3,23x 的 fib 检查站，再上方直到 3,40（1 月破位起点 3,403）筹码稀薄。</p>
+
+
+<h3>再扩到 2,500–4,000：判定不变，且出现清晰的三级结构</h3>
+<div class="tbl"><table>
+<thead><tr><th class="l">条带</th><th>多周期<br>(根数/次数/纪元)</th><th>近期换手</th><th>URPD 真实</th><th class="l">结构位</th><th class="l">级别</th></tr></thead>
+<tbody>
+<tr><td class="l"><b>2,900–3,120</b></td><td>792/10/5+5</td><td><b>42% / 246 根</b></td><td><b>~5.3M（真人最浓）</b></td><td class="l">关口 3,000 居中</td><td class="l"><b>一级：唯一的三族全叠真墙</b></td></tr>
+<tr><td class="l">3,120–3,300</td><td>767/11/5+4</td><td>28.6% / 142</td><td>仅 ~1.2M</td><td class="l">fib 0.5 = 3,231</td><td class="l">二级：磨区 + 检查站</td></tr>
+<tr><td class="l">3,300–3,400</td><td>375/<b>7</b>/4</td><td>2.9% / 44</td><td>~0.7M</td><td class="l">1 月破位起点 3,403 / 12 月顶 3,448</td><td class="l">二级：趋势定义位（收复 3,40 = 熊市结构翻转）</td></tr>
+<tr><td class="l">3,400–3,700</td><td>渐薄（3,6–3,7 仅 168/1/2）</td><td>&lt;1.5%</td><td>0.2–0.4M/桶</td><td class="l">fib 0.618 = 3,639 落在记忆洞里</td><td class="l">真空带：过了 3,4 之后滑行</td></tr>
+<tr><td class="l">3,700–4,000</td><td>624 根、3,8–3,9 有 <b>7 次驻留</b></td><td>≈0</td><td>0.2–0.55M/桶</td><td class="l">—</td><td class="l">三级：记忆架，无筹码</td></tr>
+<tr><td class="l"><b>3,880–4,110</b></td><td>—</td><td>≈0</td><td>极薄</td><td class="l"><b>2024-03 顶 4,093 + 2024-12 顶 4,108 双周期顶 + 关口 4,000</b></td><td class="l"><b>三级核心：结构/心理墙（非筹码墙）</b></td></tr>
+</tbody></table></div>
+<p>方法论提醒：URPD 是活快照——3,4K 以上今天的"真空"描述的是<b>今天的持有人</b>，不是未来的阻力；若价格真的重返那里，是带着一路新建的成本基础去的，届时墙图要整体重算。所以远区的判断只能靠魏神的多周期记忆层（稳定）+ 结构位，URPD 只主宰近端。三级结构的实战读法：<b>破 3,12 前一切以 2,90–3,12 为战场；破 3,12 后磨到 3,40 是熊牛分界战（收复 1 月破位起点）；过 3,40 是滑行段，下一次真正的集结在 3,88–4,11 的双周期顶</b>。</p>
+
+<h3>三条独立方法在同一个位置汇合</h3>
+<p><b>100 天到期窗映射的迷你顶 ≈ 2,92x（§08）、中枢上沿 2,777–2,800（§12）、URPD 解套墙 2,723–3,020（本节）</b>——三个互不相关的口径都指向同一条带。操作调整：减仓/对冲梯的权重从"顶部锚区最重"改为<b>"2,777 / 2,888 / 2,999 加重（第一道墙内逐档卸），4,222–4,888 减轻（URPD 显示那里几乎没有持有人成本，属图形锚而非供给）"</b>；若价格放量站上 3,02 并守住，墙翻转为支撑，梯子中段（3,111–3,555）再接管。URPD 是活数据，每周随例行刷新复查一次。</p>
+
+
+<h2><span class="num">14 · 归因（已更正）</span>频率下降是降敞口还是优化模型？——都不是：是环境切换 + 一年昂贵的学费</h2>
+<div class="callout"><p><strong>更正：</strong>本节初版以"2025 与 2023 绝对收益几乎相同（+10.43 vs +10.63 BTC）"论证"没有牺牲收益"。<b>该论证无效</b>——同期袖口从均值 6.7 涨到 23.0 BTC，基数变了 3.4 倍，绝对值不可比。按百分比重算，<b>2023 的增速远高于 2025</b>。以下为重做的归因。</p></div>
+<div class="tbl"><table>
+<thead><tr><th class="l">年</th><th>BTC 行情</th><th>袖口（均值）</th><th>币收益</th><th>对袖口均值</th><th>对总币</th><th>绝对换手</th></tr></thead>
+<tbody>
+<tr><td class="l">2023</td><td>+153%</td><td>3.2→13.8（6.7）</td><td>+10.63</td><td><b>+159%</b></td><td>+15.3%</td><td>2,272 BTC</td></tr>
+<tr><td class="l">2024</td><td>+122%</td><td>13.8→16.7（14.7）</td><td>+3.10</td><td>+21%</td><td>+3.9%</td><td>2,294 BTC</td></tr>
+<tr><td class="l">2025</td><td><b>−6%</b></td><td>16.8→27.4（23.0）</td><td>+10.43</td><td><b>+45%</b></td><td>+12.5%</td><td>928 BTC</td></tr>
+</tbody></table></div>
+<p>袖口口径 2023 是 2025 的 <b>3.5 倍</b>（期初口径 5.3 倍）。但要判断"是否变强"，必须扣掉行情本身给的东西——<b>2023 有 +153% 的顺风，2025 是 −6% 的平盘</b>。用"恒定 1× 方向敞口"作基准（反向合约币本位）：</p>
+<div class="tbl"><table>
+<thead><tr><th class="l">年</th><th>实际收益率<br>（对袖口）</th><th>1× 恒定敞口基准</th><th>等效杠杆<br>（达此收益需持有多少倍）</th><th>实际平均<br>|杠杆|</th><th>实际峰值</th><th><b>资本效率比</b><br>（等效 ÷ 实际）</th></tr></thead>
+<tbody>
+<tr><td class="l">2023</td><td>+159%</td><td>多 +61%</td><td>2.6×</td><td>0.75</td><td><b>10.4</b></td><td>3.5</td></tr>
+<tr><td class="l">2024</td><td>+21%</td><td>多 +55%</td><td><b>0.4×</b></td><td><b>1.17</b></td><td>3.7</td><td><b>0.3</b></td></tr>
+<tr><td class="l">2025</td><td>+45%</td><td>空 +6%</td><td><b>7.2×</b></td><td>0.73</td><td>2.3</td><td><b>9.8</b></td></tr>
+</tbody></table></div>
+<p>结论因此翻转：<b>2023 的 +159% 里，一个什么都不做的 1× 恒定多头就白拿 +61%</b>；他用最高 10.4× 的杠杆把它放大到 2.6× 等效。而 2025 在完全没有 beta 的平盘里，用 0.73× 的平均杠杆做出了 <b>7.2× 等效敞口</b>——资本效率是 2023 的 2.8 倍。<b>按机会集调整后，2025 才是他最好的一年。</b></p>
+<h3>但"优化模型"这个说法也不成立——2024 是反例</h3>
+<div class="tbl"><table>
+<thead><tr><th class="l">年 / 按前日杠杆分桶的币收益</th><th>&gt;2×</th><th>1–2×</th><th>≤1×</th><th>合计</th></tr></thead>
+<tbody>
+<tr><td class="l">2023</td><td><b>+4.07</b>（31 天）</td><td>+2.48</td><td>+4.08</td><td>+10.68</td></tr>
+<tr><td class="l">2024</td><td>−0.46</td><td><b>−11.92</b></td><td>+15.48</td><td>+3.11</td></tr>
+<tr><td class="l">2025</td><td>−1.49（1 天）</td><td>−4.23</td><td><b>+16.14</b></td><td>+10.51</td></tr>
+</tbody></table></div>
+<ul class="plain">
+<li><b>2024 是被行情打脸的一年，不是优化的一年</b>：BTC +122% 的大牛市里，他的平均杠杆反而是三年最高（1.17），却只做出 <b>0.4× 等效</b>——<b>跑输一个什么都不想的 1× 多头 2.6 倍</b>，资本效率 0.3。1–2× 桶单独亏掉 <b>11.92 BTC</b>（牛市里的常驻对冲）。真正在"优化"的人不会在这一年把杠杆调到最高。</li>
+<li><b>唯一单调改善的是低杠杆引擎</b>：≤1× 桶的绝对产出 +4.08 → +15.48 → <b>+16.14 BTC</b>，翻了近 4 倍，而同期绝对换手从 2,272 降到 928 BTC。<b>这才是三年里真实且可复制的进步。</b></li>
+<li><b>杠杆部件的期望在恶化</b>：&gt;1× 的合计贡献 +6.55（2023，且几乎全部来自 H2 那一次结构性突破押注）→ −12.38（2024）→ −5.72（2025）。</li>
+<li><b>不是容量限制</b>：绝对换手 2,272 → 928 BTC 是<b>下降</b>的。以 23 BTC 的袖口做 2,272 BTC 换手只需要 99×（他 2023 做过 340×），完全做得到。<b>他是主动少做，不是做不动。</b></li>
+</ul>
+<p><b>三年演化的正确描述是"体制适应 + 一年昂贵的学费"，不是"持续优化"，也不是"单纯降敞口"。</b>频率下降与其说是策略进化，不如说是跟着环境走：牛市里靠 beta 和杠杆（2023）→ 方向判断切换但执行没跟上（2024，代价 −11.92 BTC）→ 平盘里靠低杠杆结构性收益（2025）。可复制的内核只有一条：<b>≤1× 的低杠杆引擎，三年单调变强、且与行情方向无关。</b></p>
+<h3>2026 复刻 2023：六个特别注意（环境差异）</h3>
+<ul class="plain">
+<li><b>① 头顶的墙近得多。</b>BTC 2023-01 距上轮中枢带还有 +34% 空间；ETH 现在距 2,90–3,12 真墙只有 +17%，且中间隔着 2,5–2,7 六年老中枢（磨区）。"突破后滑行"的空间被压缩——切片与小倾斜的环境是好的，近端吃大波段的空间不如他当年。</li>
+<li><b>② 对手盘结构变了。</b>BMNR/ETF/质押冻结了带内约 40% 筹码——2023 没有这种巨鲸冻结层。墙的软硬随 BMNR mNAV 浮动（跌破 1 持续一周 = 墙变硬预警，用现成看板盯）。</li>
+<li><b>③ 波动结构错位。</b>近 30 天 ETH 是"收盘间波动大、日内来回小"的趋势型；他 2023-01→04 是日内来回充足的环境。切片引擎产能打折：档距放宽到 0.25–0.3%、单档缩到 10% 袖口，等日内/收盘波动比回到 1 以上再恢复。</li>
+<li><b>④ 他的 2023 是人肉盯出来的</b>（峰值 UTC 19–21 = 北京凌晨 3–5 点）。复刻必须程序化，否则等于只复刻了他睡着的那部分。</li>
+<li><b>⑤ 手续费结构不同。</b>他 2023 年 65% taker 还能净赚靠的是当年的点差与返佣；2026 必须 maker-only，否则切片引擎直接为负。</li>
+<li><b>⑥ 别把 H2 打法提前。</b>现在是 H1 中段（金叉后 ~48 天，到期窗 10 月中下旬）。H2 式的 47 天顺势重仓属于下一个金叉，不属于现在。</li>
+</ul>
+
+<h3>可以从他行为里优化的六件事（把他三年学费直接带回 2023 式环境）</h3>
+<ul class="plain">
+<li><b>① 第一天就用 2025 的执行纪律</b>：maker-only、月换手 ≤15×、月费用 ≤0.5% 袖口——他 2023 烧掉收益的 11%，2025 只烧 3%。这是唯一确定无副作用的白捡改进。<b>但别指望 2023 式的百分比回报</b>：那 +159% 里有 +61% 是 BTC 三倍行情白给的，ETH 要复现同样的顺风得走到 ~6,000。</li>
+<li><b>② 砍掉零期望的杠杆尖峰</b>：H1 十次重仓净贡献 ≈ 0，却藏着单日 −86.9% 袖口的尾部。1.5× 硬顶 + 事件态 0.5×；唯一例外是结构确认日的集中多（H2 的正期望部分）。</li>
+<li><b>③ 波段后 48 小时冷却期</b>：他 8 段小波段有 3 段在结束后 1–2 天升级成 6–10× 灾难。规则化：任何多日持仓了结后 48h 内禁开 &gt;1× 新仓。</li>
+<li><b>④ 对冲直接用 2025 的排程制</b>（h 随价格/前高位置爬升，§10 的梯子即排程表），跳过他 2024 的"常驻净空学费年"——方向对、执行旧，是他最贵的一课。</li>
+<li><b>⑤ 止盈带明确化</b>：0.5× 档止盈中枢 +1%（p75 +1.6%）；只有轻仓允许拿远（&lt;0.2× 的 p90 才有 +5%）。别用重仓等大肉。</li>
+<li><b>⑥ 用他没有的仪表盘</b>：URPD−BMNR 墙图、多周期中枢表、mNAV 预警、100 天时钟。他用三年盘感迭代出来的东西，这些工具把它前置成第一天就有的规则。</li>
+</ul>
+
+
+<h2><span class="num">15 · 2023 行为拆解</span>钱从哪三件事来、被哪三件事拿走、哪些白忙</h2>
+<div class="callout blue"><p><strong>口径前置声明（本节成立的前提）：</strong>BitMEX 对 XBTUSD <b>每日 12:00 UTC 结算已实现盈亏</b>，而日线按零点切分——<b>单日的"方向 vs 残差"拆分会被 ±1 天涂抹</b>（例：10-24 日线显示 +3.23 残差、价格却只动 +0.25%，实为 10-23 12:00→10-24 12:00 窗口内的方向性利润）。因此本节一律用<b>多日事件窗</b>聚合，不做单日归因。总量校验：重建终值 95.73 vs 官方 95.75，差 0.02。</p></div>
+<p>2023 全年 +10.68 BTC，集中度极高——<b>最好的 20 天合计 +21.53，其余 345 天净 −10.85</b>。按行为切成事件窗：</p>
+<div class="tbl"><table>
+<thead><tr><th class="l">事件窗</th><th>天数</th><th>BTC 行情</th><th>杠杆区间</th><th>币损益</th><th>占全年</th></tr></thead>
+<tbody>
+<tr><td class="l"><b>① 10 月突破做多</b>（10-18~10-31）</td><td>14</td><td>+27%</td><td>+1.3~+4.4</td><td><b>+9.30</b></td><td><b>+87%</b></td></tr>
+<tr><td class="l">② USDC 崩后反弹段（03-12~03-20）</td><td>9</td><td>+34%</td><td>0~+5.3</td><td>+1.89</td><td>+18%</td></tr>
+<tr><td class="l">③ 8 月末空头段（08-15~09-05）</td><td>22</td><td><b>−11%</b></td><td>−3.1~−0.2</td><td>+1.89</td><td>+18%</td></tr>
+<tr><td class="l">④ 突破前夜箱顶下持空（10-13~10-16）</td><td>4</td><td>−0.1%</td><td>−2.5~−1.1</td><td>+0.81</td><td>+8%</td></tr>
+<tr><td class="l"><b>⑤ 10-16 假 ETF 消息追涨杀跌</b>（计入 10-17 结算）</td><td>1</td><td>+1%</td><td>−2.5→+4.4</td><td><b>−3.17</b></td><td><b>−30%</b></td></tr>
+<tr><td class="l"><b>⑥ USDC 夜 6.6× 抄底 + 恐慌市价砍</b>（03-08~03-11）</td><td>4</td><td>−9%</td><td>0~+6.6</td><td><b>−1.91</b></td><td><b>−18%</b></td></tr>
+<tr><td class="l">⑦ 11 月高位反复（11-01~11-20）</td><td>20</td><td>+6%</td><td>+0.1~+2.2</td><td>−1.06</td><td>−10%</td></tr>
+<tr><td class="l">⑧ 割肉后 V 型追单（03-14~03-17）</td><td>4</td><td>+10%</td><td>0~+5.3</td><td>−0.54</td><td>−5%</td></tr>
+</tbody></table></div>
+
+<h3>大涨的三件事：一次结构押注 + 一次危机反弹 + 一段顺势对冲</h3>
+<ul class="plain">
+<li><b>① 10 月突破做多 = 全年的 87%。</b>10-17 日线站上三个月箱顶后吃单翻多至 4.37×，随后沿 32,888/33,888/34,888/35,999 逐档减到 1.3×，14 天赚 9.30 BTC。这是<b>唯一一次"信号 + 集中 + 有减仓表"三件齐备</b>的交易，也是全年唯一值得整段复制的行为。</li>
+<li><b>② 危机反弹段。</b>USDC 脱锚砸出坑后的 9 天里 BTC +34%，他在清仓状态重新建仓吃到 +1.89。注意：这段的前提是<b>他在坑里已经空仓</b>——正因为砍光了才有干净的资产负债表去接。这是那次灾难仅有的正面副产品。</li>
+<li><b>③ 8 月末空头段：币本位策略的教科书样本。</b>22 天里 BTC 跌 11%，他持 −0.2~−3.1× 净空，赚 +1.89 BTC，与 ① 的贡献相同——<b>下跌段用对冲赚币，和上涨段用杠杆赚币，是同一台机器的两个方向</b>。这正是 2025 年被他放大成主引擎的那一部分。</li>
+</ul>
+
+<h3>大跌的三件事：全都发生在"消息 + 杠杆 + 手比规则快"的组合下</h3>
+<ul class="plain">
+<li><b>⑤ 10-16 假 ETF 消息：单笔最贵，−3.17 BTC（全年利润的 30%）。</b>13:00 冲高时吃单追多 64 万张，消息证伪后当天反手卖 90 万张并加空到 −2.46×，次日 12:00 结算兑现亏损。<b>讽刺的是：他追多的方向是对的（一天后真突破了），错的是用市价追、以及被打脸后立刻反向。</b>如果 10-16 什么都不做，全年就是 +13.85 而不是 +10.68。</li>
+<li><b>⑥ USDC 夜：−1.91 BTC，且差点更糟。</b>6.64× 抄底 → 169 笔市价单割在次日最低区。四天窗口净亏 1.91，但真正的代价是袖口从 5.2 打到 1.9 BTC（−63%），几乎丧失了后面反弹段的接货能力。</li>
+<li><b>⑦ 11 月高位反复：−1.06 BTC，最隐蔽的一笔。</b>20 天里 BTC 涨 6%，他在 +0.1~+2.2× 之间来回切，结果是亏的。<b>在上涨行情里做多还亏钱</b>，说明这段的交易不是方向判断问题，是过度操作问题。</li>
+</ul>
+
+<h3>看似有效实则低效的三类行为</h3>
+<div class="tbl"><table>
+<thead><tr><th class="l">行为</th><th>表面</th><th class="l">实际</th></tr></thead>
+<tbody>
+<tr><td class="l"><b>日常高频切片</b>（剔除两大事件窗的 336 天）</td><td>净 +3.75 BTC，看着是稳定的现金流</td><td class="l">换手 1,642 BTC = <b>247× 袖口</b>，毛利 +4.64 被手续费吃掉 <b>19%</b>。全年 1.19 BTC 手续费里绝大部分产生于此。<b>这台机器一年的净产出只有突破那一战的 40%，却占用了全部注意力和全部费用预算。</b></td></tr>
+<tr><td class="l"><b>跨日小波段</b>（8 段，§12）</td><td>持仓 2–10 天，像在做波段</td><td class="l">合计 <b>−0.36 BTC</b>；且 8 段中 3 段在结束后 1–2 天升级成 6–10× 灾难。<b>不仅不赚钱，还是灾难的前置动作。</b></td></tr>
+<tr><td class="l"><b>远端阶梯反复撤挂</b>（§11）</td><td>盘口上永远挂着"战略埋伏"</td><td class="l">距市价 ≥10% 的批次成交率仅 <b>3%</b>，撤单中位寿命 2–10 天；2023 年 40 张远单撤掉 38 张。<b>真正成交的那 13 档全部是价格走到跟前时重挂的近端单</b>——远端埋伏的实际功能是心理锚，不是收益来源。</td></tr>
+</tbody></table></div>
+<p><b>合起来看 2023 的真相：一年 365 天的操作，净收益的 87% 来自 14 天的一次结构性押注；一次消息面的手快（10-16）就吐掉了其中 30%；而占据全年绝大多数时间和全部费用的高频切片，产出不到那一战的一半。</b>这也解释了他此后三年为什么持续做减法——他删掉的正是这里"看似有效"的部分。</p>
+
+<div class="caveat">
+  <p><strong>边界声明</strong></p>
+  <ul>
+    <li>本文是对一个公开账本的统计描述与模型参数推导，不是投资建议；候选阶梯是方法演示，数字由你自己的资金、袖口比例和风险预算决定。</li>
+    <li>本文为独立分析，与 Paul Wei（@coolish）本人无任何关联；这里的任何结论都不构成实盘授权。</li>
+    <li>ETH 币本位永续（coin-margined）的资金费结构、流动性与 BitMEX XBTUSD 不同；R6 的预算和对冲比例上 ETH 实盘前需要用 ETH 自己的资金费历史重算。</li>
+    <li>所有 2024 年以后的"提前多久挂"不可量化（见 §01）；2024–2025 的远端阶梯只能确认"存在、被撤、在何价位"。</li>
+  </ul>
+</div>
+</div>
+</body>
+</html>
